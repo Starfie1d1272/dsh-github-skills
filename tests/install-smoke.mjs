@@ -126,11 +126,24 @@ async function main() {
     }
     results.discovered = EXPECTED_SKILLS
 
-    const github = await ctx.skills.get('github', {})
-    if (github === undefined) throw new Error('ctx.skills.get("github") returned undefined')
-    if (!github.content.includes('# GitHub')) throw new Error('loaded github skill body is unexpected')
-    if (github.resourceBase?.kind !== 'directory') throw new Error('github skill resourceBase must be a directory')
-    results.loaded = 'github body loaded with directory resourceBase'
+    // Contract: every skill must load through the real registry with a
+    // directory resourceBase whose referenced files actually exist.
+    const loaded = {}
+    for (const name of EXPECTED_SKILLS) {
+      const definition = await ctx.skills.get(name, {})
+      if (definition === undefined) throw new Error(`ctx.skills.get("${name}") returned undefined`)
+      if (definition.content.length === 0) throw new Error(`skill ${name} loaded with empty body`)
+      if (definition.resourceBase?.kind !== 'directory') throw new Error(`skill ${name} resourceBase must be a directory`)
+      const base = definition.resourceBase.path
+      if (!existsSync(join(base, 'SKILL.md'))) throw new Error(`skill ${name} resourceBase missing SKILL.md: ${base}`)
+      // Every scripts/ reference in the body must resolve inside the base.
+      const scriptRefs = [...definition.content.matchAll(/`(?:node )?(scripts\/[^`\s]+)`/g)].map((m) => m[1])
+      for (const ref of scriptRefs) {
+        if (!existsSync(join(base, ref))) throw new Error(`skill ${name} references missing script ${ref}`)
+      }
+      loaded[name] = { bodyBytes: definition.content.length, resourceBase: base, scripts: scriptRefs }
+    }
+    results.loaded = loaded
 
     // The model-facing catalog only carries summaries (progressive disclosure).
     const summary = skills.find((skill) => skill.name === 'github')

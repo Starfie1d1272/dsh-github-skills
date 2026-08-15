@@ -1,0 +1,82 @@
+name: Release
+
+# npm Trusted Publishing: triggered by version tags (v*), this workflow
+# verifies the tag against package.json and publishes to the official npm
+# registry using the OIDC-issued identity — no NPM_TOKEN, no secrets.
+#
+# Registry-side setup required ONCE (manual, by a maintainer with npm access):
+#   npm trust github
+#   # then follow the interactive flow to authorize:
+#   #   repository: Starfie1d1272/dsh-github-skills
+#   #   workflow:    release.yml
+#   #   allowed action: npm publish
+# (npm `trust` requires npm >= 11.15.0; the workflow pins npm >= 11.5.1 for
+# the publish step. See https://docs.npmjs.com/generating-provenance-statements)
+#
+# The tag push does not match ci.yml (`branches: [main]`), so this workflow
+# re-runs the full validation (tests, package validation, and the
+# disposable-profile install smoke) before publishing.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  # Only the OIDC token for Trusted Publishing; nothing else is written.
+  contents: read
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      # actions/checkout@v4, SHA-pinned (verified immutable).
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      # pnpm/action-setup@v4, SHA-pinned (the official dsh plugin manager uses pnpm).
+      - name: Setup pnpm
+        uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a
+        with:
+          version: 11.21.0
+
+      # actions/setup-node@v4, SHA-pinned.
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      # Trusted Publishing needs npm >= 11.5.1 (and `npm trust` >= 11.15.0);
+      # make the runner's npm deterministic instead of relying on the Node
+      # release's bundled version.
+      - name: Pin npm for trusted publishing
+        run: npm install -g npm@11.5.1
+
+      # The install smoke boots a real disposable DSH profile through the
+      # actual `dsh` CLI, pinned to the reviewed rc.6 baseline.
+      - name: Install DSH rc.6 (pinned baseline)
+        run: npm install -g @deepseek-ai/dsh@0.1.0-rc.6
+
+      - name: Unit, safety, and structure tests
+        run: npm test
+
+      - name: Package validation (npm pack allowlist + isolated install)
+        run: npm run pack:check
+
+      - name: Disposable-profile install smoke
+        run: npm run test:smoke
+
+      - name: Verify tag matches package version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          echo "tag version: ${TAG_VERSION}"
+          echo "package version: ${PKG_VERSION}"
+          test "${TAG_VERSION}" = "${PKG_VERSION}"
+
+      # OIDC trusted publishing: npm exchanges the Actions id-token with the
+      # registry automatically — no NODE_AUTH_TOKEN / NPM_TOKEN anywhere.
+      - name: Publish to npm
+        run: npm publish --access public

@@ -17,16 +17,19 @@ jobs:
       matrix:
         node: ['22.19.0', '24']
     steps:
+      # actions/checkout@v4, SHA-pinned (verified immutable).
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
+      # pnpm/action-setup@v4, SHA-pinned (the official dsh plugin manager uses pnpm).
       - name: Setup pnpm (profile plugin manager used by the install smoke)
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a
         with:
           version: 11.21.0
 
+      # actions/setup-node@v4, SHA-pinned.
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: ${{ matrix.node }}
 
