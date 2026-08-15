@@ -1,5 +1,7 @@
 # dsh-github-skills
 
+English | [简体中文](README.zh-CN.md)
+
 > **This is not a GitHub API plugin.** It is a skill pack that teaches DeepSeek
 > Harness how to work *through* GitHub engineering workflows: PR triage,
 > review feedback, CI diagnosis, and safe publish — composing whatever
@@ -71,7 +73,8 @@ npx @deepseek-ai/dsh plugin --profile web add github:Starfie1d1272/dsh-github-sk
 - This package is pure JavaScript with **no build/prepare step**, so a git
   install has no missing-build-artifact problem (no TypeScript `lib/` output,
   no `allowBuilds` prompt).
-- After the npm release, prefer the npm install above.
+- For normal installations, prefer the npm package above; use a
+  commit-pinned GitHub source for unreleased or auditable snapshots.
 
 ### Local tarball (advanced)
 

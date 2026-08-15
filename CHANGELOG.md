@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   publishing."; keywords updated for discovery (`dsh-plugin` first, plus
   `dsh-skill`, `deepseek-harness`, `github`, `github-actions`,
   `code-review`, `agent-skills`, `developer-tools`, `git`).
+- README (en/zh): added the language navigation links under the title
+  (English ↔ 简体中文).
+- README (en/zh): GitHub-source install wording is now permanent — prefer
+  the npm package for normal installations; a commit-pinned GitHub source
+  is for unreleased or auditable snapshots.
+- Tests: `package.test.mjs` derives the expected packed version from the
+  working tree instead of hard-coding `0.1.0`, so future version bumps no
+  longer require test synchronization.
+- Release housekeeping: GitHub repository About metadata (description,
+  homepage → npm package page, topics incl. `dsh-plugin`) set via `gh repo
+  edit`; not a repository file change.
 - No functional changes; the release exercises the automated `v*` tag →
   validation → OIDC publish path for the first time.
 

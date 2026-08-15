@@ -1,5 +1,7 @@
 # dsh-github-skills
 
+[English](README.md) | 简体中文
+
 > **这不是一个 GitHub API 插件。** 它是一个 Skill Pack，教 DeepSeek Harness 如何"走通"GitHub 工程工作流：PR triage、review 反馈、CI 诊断、安全发布——组合会话中已有的 GitHub/Git 能力，必要时回退到 `gh`/`git`。
 
 *DeepSeek Harness（DSH）的非官方社区插件。与 deepseek-ai、OpenAI、GitHub 无隶属关系，也未获其背书。*
@@ -57,7 +59,7 @@ npx @deepseek-ai/dsh plugin --profile web add github:Starfie1d1272/dsh-github-sk
 
 - 推荐 pin commit（`#<sha>`），避免后续 push 静默改变运行内容。
 - 本包是**纯 JavaScript、无 build/prepare 步骤**，git 安装不存在缺失构建产物问题（无 TypeScript `lib/` 输出、无 `allowBuilds` 提示）。
-- npm 发布后，普通用户优先 npm 安装。
+- 常规安装优先使用上面的 npm 包；GitHub commit-pin 适用于未发布或需要可审计快照的场景。
 
 ### 本地 tarball（高级）
 
