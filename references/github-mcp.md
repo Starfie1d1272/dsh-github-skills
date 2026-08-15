@@ -28,10 +28,23 @@ the profile's `cordis.yml`:
     serverName: github
     transport: stdio
     command: docker
-    args: ['run', '-i', '--rm', 'ghcr.io/github/github-mcp-server']
+    args:
+      - run
+      - -i
+      - --rm
+      - -e
+      - GITHUB_PERSONAL_ACCESS_TOKEN
+      - ghcr.io/github/github-mcp-server
     env:
       GITHUB_PERSONAL_ACCESS_TOKEN: !!js process.env.GITHUB_PAT
 ```
+
+Note on `env` vs container: the `env` block feeds the **docker CLI process**,
+not the container. To authenticate, the token must be forwarded into the
+container with `-e GITHUB_PERSONAL_ACCESS_TOKEN` (as in the server's own
+Docker examples); `env` supplies that variable to `docker run`. For
+non-Docker installs, set the token in the environment the server process
+itself runs under.
 
 ## GitHub MCP server
 

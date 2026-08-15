@@ -131,7 +131,7 @@ After installation, just say:
 ```text
 "What's the state of PR 482?"            → github (triage)
 "Address the review comments on this PR" → gh-address-comments
-"Why is CI failing on my branch?"        → gh-fix-ci
+"Why are the GitHub Actions checks failing on this PR?" → gh-fix-ci
 "Commit these changes and open a draft PR" → gh-publish
 "Fork awesome-foo, update its README, and open a PR" → gh-publish
 ```

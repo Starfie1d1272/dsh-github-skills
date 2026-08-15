@@ -5,8 +5,9 @@ description: Diagnose or fix failing GitHub Actions checks from real check and l
 
 # GitHub Actions CI Fix
 
-Diagnose or fix failing GitHub Actions checks from real check and log
-evidence.
+Diagnose or fix failing GitHub Actions checks on a pull request, from real
+check and log evidence. "Current branch" resolves to its associated PR;
+branch-only Actions runs without a PR are outside this workflow.
 
 ## Evidence
 

@@ -108,7 +108,7 @@ profile 的 `dsh.profile.bundles` 列表由官方插件管理器自动 reconcile
 ```text
 "PR 482 现在什么状态？"               → github（triage）
 "处理这个 PR 的 review 意见"          → gh-address-comments
-"为什么我这个分支的 CI 挂了？"        → gh-fix-ci
+"为什么这个 PR 的 GitHub Actions check 挂了？" → gh-fix-ci
 "提交这些改动并开一个 draft PR"       → gh-publish
 "Fork awesome-foo，更新 README，然后开 PR" → gh-publish
 ```

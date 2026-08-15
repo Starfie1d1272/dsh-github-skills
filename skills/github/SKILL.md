@@ -22,8 +22,8 @@ capability exists.
 - general repository / issue / PR triage → stay here
 - review feedback → `gh-address-comments`
 - failing GitHub Actions → `gh-fix-ci`
-- branch / commit / push / PR publication, including fork contribution
-  → `gh-publish`
+- push / publish / open a PR — including fork contributions — with any
+  required branch/commit work → `gh-publish`
 
 When a specialist matches, load it with `skill()` and let it own the
 workflow.
@@ -56,5 +56,5 @@ here only when explicitly requested; everything else routes.
 
 - "Summarize the open PRs in this repo." → stay here
 - "Address the review comments on PR 482." → `gh-address-comments`
-- "Why is CI failing on this branch?" → `gh-fix-ci`
+- "Why are the GitHub Actions checks failing on this PR?" → `gh-fix-ci`
 - "Fork awesome-foo, update its README, and open a PR." → `gh-publish`

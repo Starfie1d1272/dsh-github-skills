@@ -65,8 +65,14 @@ Remote mutation includes, but is not limited to:
 - merging
 - closing an issue
 
-Each of these must come from **explicit user intent** or pass through an
-existing DSH approval gate. Nothing in this package auto-approves.
+Each of these must come from **prior explicit user intent** or from an
+**affirmative user approval presented by the host for that exact mutation**
+(for example, the DSH approval gate). Nothing in this package auto-approves.
+
+An existing approval mechanism is not itself authorization: an
+analysis/fix request must never be silently upgraded into a write merely
+because a gate exists — the user's own request decides intent, and "the
+host can ask" is not a write request.
 
 ### 5. Analysis requests never become writes
 
@@ -126,10 +132,10 @@ instead.
 
 | Skill | Remote writes it may perform | Condition |
 |---|---|---|
-| `github` (umbrella) | none by itself | routes to specialists instead |
-| `gh-address-comments` | reply / resolve thread / submit review / push / update PR | explicit user request for that write |
-| `gh-fix-ci` | push / rerun workflow / comment | explicit user request or host approval |
-| `gh-publish` | commit / push / create draft PR | the explicit publish intent |
+| `github` (umbrella) | scoped issue/PR metadata writes (labels, reactions, issue edits) | explicit user request for that exact write |
+| `gh-address-comments` | reply / resolve thread / submit review / push / update PR | explicit user intent, or an affirmative host approval for that exact write |
+| `gh-fix-ci` | push / rerun workflow / comment | explicit user intent, or an affirmative host approval for that exact write |
+| `gh-publish` | commit / push / create draft PR | prior explicit publish intent |
 
 ## Reporting obligations
 

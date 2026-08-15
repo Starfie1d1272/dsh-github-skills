@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Routing and responsibility boundaries rewritten.** All four SKILL.md
   files replaced with compressed, high-signal prompts focused on the routing
   contract and safety invariants rather than edge-case coverage. Total body
-  text reduced from 383 (v0.1.2) to **194 lines (−49%)**; the GLM design
+  text reduced from 383 (v0.1.2) to **198 lines (−48%)**; the GLM design
   draft landed at 238, and the final pass kept the compression while fixing
   routing semantics.
 - **Resident descriptions re-compressed.** The rc.6 model-facing skill
@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   entries under a 500-char host cap), so the description is the primary
   router. The final pass re-compressed the descriptions from the GLM draft
   (total 1467 chars; `github` alone was 458) to a resident budget of
-  ≤300 chars each (total **772** — below v0.1.2's 851). The `github`
+  ≤300 chars each (total **799** — below v0.1.2's 851). The `github`
   description no longer restates the specialists' full routing table; all
   four descriptions appear together in the catalog.
 - **Mixed specialist composition.** Removed the "mixed requests follow
@@ -58,6 +58,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   hunks, stop on ambiguity, tracked/fork remote, no force by default,
   existing-PR check, draft default, cross-repo semantics, no merge/delete
   by implication.
+- **Review fixes (trigger/authorization alignment).** The GitHub MCP
+  Docker example now forwards the PAT into the container
+  (`-e GITHUB_PERSONAL_ACCESS_TOKEN`; the mcp-client `env` block feeds the
+  docker CLI process, not the container). The `gh-publish` catalog trigger
+  is tightened to push/open-PR intent — branch/commit are internal steps of
+  the publish flow, not entry points (description and umbrella routing
+  updated). `references/safety-model.md` now states the authorization model
+  precisely (remote writes need prior explicit user intent or an
+  affirmative host approval for that exact mutation; an existing approval
+  gate is not itself authorization) and its per-skill table matches the
+  skills (umbrella: scoped issue/PR metadata writes only). `gh-fix-ci`
+  clarifies that "current branch" resolves to its associated PR; branch-only
+  Actions runs without a PR are outside the workflow (README examples
+  updated to match).
 - **`whenToUse` omitted from all four skills (optional field).** The rc.6
   model-facing catalog renders `name` + `description` only; routing-critical
   information therefore lives in `description`. DSH SkillSummary still

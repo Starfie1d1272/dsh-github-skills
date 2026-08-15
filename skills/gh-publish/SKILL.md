@@ -1,6 +1,6 @@
 ---
 name: gh-publish
-description: Publish task-scoped changes to GitHub as a pull request, including fork-based external contributions. Use for branch, commit, push, or PR workflows; draft PR is the default.
+description: Publish task-scoped changes to GitHub through a branch/commit/push/PR flow, including fork-based external contributions. Use when the user wants changes pushed or a PR opened; draft PR is the default.
 ---
 
 # GitHub Publish
@@ -9,6 +9,9 @@ Publish task-scoped changes to GitHub as a pull request, including
 fork-based external contributions. This is the only flow in the pack that
 performs remote writes by design: the publish request itself is the
 explicit intent.
+
+Branching and committing are internal steps here, not entry points: use
+this skill when the user wants changes pushed or a PR opened.
 
 ## Workflow
 
