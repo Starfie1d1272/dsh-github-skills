@@ -83,5 +83,7 @@ jobs:
 
       # OIDC trusted publishing: npm exchanges the Actions id-token with the
       # registry automatically — no NODE_AUTH_TOKEN / NPM_TOKEN anywhere.
+      # --provenance attaches the SLSA provenance signature to the published
+      # version (requires the OIDC identity; see npm provenance docs).
       - name: Publish to npm
-        run: npm publish --access public
+        run: npm publish --access public --provenance
