@@ -133,6 +133,7 @@ After installation, just say:
 "Address the review comments on this PR" → gh-address-comments
 "Why is CI failing on my branch?"        → gh-fix-ci
 "Commit these changes and open a draft PR" → gh-publish
+"Fork awesome-foo, update its README, and open a PR" → gh-publish
 ```
 
 ## Safety
@@ -170,7 +171,7 @@ rules. Highlights:
 
 ```
 lib/index.js            minimal bundle shim: registers a read-only SkillProvider
-skills/<name>/SKILL.md  four skills; catalog = name+description, bodies load on demand
+skills/<name>/SKILL.md  four skills; catalog renders name + description only, bodies load on demand
 skills/*/scripts/       zero-dependency Node helpers (thread reads, CI evidence,
                         publish preflight)
 references/             capability matrix, safety model, upstream notes,

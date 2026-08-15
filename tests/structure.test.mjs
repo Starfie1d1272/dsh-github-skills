@@ -42,6 +42,11 @@ for (const name of EXPECTED_SKILLS) {
     assert.ok(SKILL_NAME.test(parsedName), 'name must be kebab-case')
     assert.ok(description !== undefined && description.length > 10, 'description must be present and meaningful')
     assert.ok(description.length <= 500, `description must fit the DSH catalog cap (<=500), got ${description.length}`)
+    // The DSH model-facing catalog renders name + description only, and a
+    // loaded skill injects the body only; `whenToUse` never reaches the model
+    // (verified against @deepseek-ai/dsh@0.1.0-rc.6 dsh-tool-skill). Routing
+    // triggers therefore live in the description, not in a dead field.
+    assert.equal(fields.whenToUse, undefined, 'whenToUse is dead in the DSH catalog; put triggers in description')
     const invocation = parseInvocation(fields)
     assert.equal(invocation.modelInvocable, true, 'skills must be model-invocable')
     assert.equal(invocation.userInvocable, true, 'skills must be user-invocable')
@@ -106,7 +111,7 @@ test('safety invariants are present in the SKILL.md text', () => {
   assert.ok(fixCi.includes('root cause'), 'gh-fix-ci must demand an evidence-backed root cause')
 
   const publish = readSkill('gh-publish').raw
-  assert.ok(publish.includes('git add -A') && publish.includes('never default'), 'gh-publish must forbid default git add -A')
+  assert.ok(publish.includes('git add -A') && /never\s/.test(publish), 'gh-publish must forbid default git add -A')
   assert.ok(publish.includes('draft'), 'gh-publish must default to a draft PR')
 })
 

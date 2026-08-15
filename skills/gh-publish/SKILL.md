@@ -1,121 +1,79 @@
 ---
 name: gh-publish
-description: Publish local changes to GitHub as a pull request. Confirm scope, branch, stage only the intended files, commit, verify, push, and open a draft PR using existing DSH capabilities with gh/git fallbacks.
-whenToUse: User explicitly asks to commit, push, open a PR, publish changes, "send these changes as a PR", or complete the local-to-GitHub publish flow.
+description: Publish changes to GitHub as a pull request: confirm scope, branch, stage, commit, verify, push, and open a draft PR. Covers same-repository changes and fork-based contributions to external repositories (fork creation, fork remote, cross-repo PR). Use whenever the task ends in a commit, push, or opened PR, including contributing to a repository you do not control.
 ---
 
 # GitHub Publish Changes
 
-Use this skill **only** when the user explicitly wants the full publish flow
-from the local checkout: scope confirmation, branch setup if needed,
-staging, commit, verification, push, and opening a pull request. This is the
-only flow in the pack that performs remote writes by design — the publish
-request itself is the explicit intent.
+Use when the task is to get changes onto GitHub as a pull request — in the
+current repository or as a fork-based contribution to a repository you do
+not control. This is the only flow in the pack that performs remote writes
+by design: the publish request itself is the explicit intent.
 
-## Prerequisites
+Prerequisites: `gh` installed and authenticated (`gh auth status`; ask the
+user to run `gh auth login` otherwise), and a local git repository — for an
+external target, see step 1 for fork setup.
 
-- `gh` installed and authenticated (`gh auth status`); ask the user to run
-  `gh auth login` otherwise.
-- A local git repository with a clear understanding of which changes belong
-  in the PR.
+## Workflow
 
-## Strict order
-
-1. **Resolve the git root.** `git rev-parse --show-toplevel`.
-2. **Inspect the working tree.**
-   - Run `git status --porcelain` and inspect the actual diff before
-     staging anything.
-   - Prefer the bundled read-only `scripts/publish-preflight.mjs` for
-     deterministic scope evidence: git root, branch, detached state,
-     default branch, origin/upstream, staged/unstaged/untracked files,
-     `partiallyStagedFiles`, diff stat, ahead/behind, and the objective
-     change-class signals (`hasStaged`/`hasUnstaged`/`hasUntracked`,
-     `multipleChangeClasses`, `scopeNeedsInspection`, `mixedWorktree`).
-     These signals flag *that* the tree mixes change classes; they never
-     decide scope — judge scope from the actual diff and task intent.
-3. **Identify the intended scope.**
-   - Which files belong to this task? If the tree is mixed, separate
-     task-owned paths from unrelated user changes.
-   - **Partially staged files** (same path staged AND unstaged, porcelain
-     `MM`): the already-staged content is a scope candidate, but re-running
-     `git add <file>` would sweep the user's unstaged hunks in too. Never
-     blindly re-add such a file. Stage only what you can attribute to the
-     task (e.g. `git add -p` for specific hunks); if the hunks cannot be
-     reliably separated, stop before any remote publish and report the
-     scope ambiguity.
-   - **Untracked files** are not automatically irrelevant and not
-     automatically in scope: include them only when they clearly belong to
-     the task, and say so.
-4. **Branch strategy.**
-   - If already on a suitable feature branch, stay on it.
-   - If on a default branch (main/master/...), create a new branch. Suggest
-     `dsh/<short-description>` by default, but follow the repository's own
-     branch conventions when it documents one. Do not force a fixed prefix.
-5. **Stage only the intended changes.**
-   - **Hard rule:** never default to `git add -A` on a mixed worktree.
-   - Stage explicit paths that clearly belong to the task. If scope cannot
-     be separated reliably, stop before any remote publish and report the
-     scope ambiguity.
-   - `git add -A` only when the whole worktree is confirmed in scope.
-6. **Commit.**
-   - Terse commit message derived from the actual diff and task intent.
-   - Follow the target repository's conventions; do not force a language or
-     a `[dsh]`/branded prefix.
-   - Never bypass git hooks (`--no-verify` is off-limits).
-7. **Verify.**
-   - Run only the most relevant checks (test/typecheck/lint/build for the
-     touched area). Do not globally install large toolchains just because a
-     tool is missing; use the project's existing package workflow when one
-     exists.
-8. **Push.**
-   - Push to the branch's **tracked remote** when one exists (preflight
-     `upstream`, e.g. `origin/feature`), otherwise to `origin`. Never assume
-     the remote is named `origin`; if no push remote can be resolved, stop
-     and report the blocker.
-   - `git push -u <remote> <current-branch>` — only after the user asked for
-     the publish flow.
-   - No `--force` unless the user explicitly requests it and you state the
-     risk.
-9. **Open a draft PR.**
-   - **Check for an existing PR first:** `gh pr view --json number,url`.
-     If the current branch already has a PR, do **not** create a second one
-     — report it and continue on that PR (or ask the user whether to update
-     it). Creating a duplicate PR is a remote write the user did not ask
-     for.
-   - Default to **draft** unless the user asked for a ready-for-review PR.
-   - Prefer an existing DSH GitHub PR-create capability if visible
-     (`gh_create_draft_pr`, `github_pr_create`, `pr_create`, ...).
-   - Otherwise `gh pr create --draft --fill --head <current-branch>`.
-   - Derive `head` from `git branch --show-current`; derive `base` from the
-     user request or the remote default branch
-     (`gh repo view --json defaultBranchRef`).
-   - PR title/body: synthesize from user intent + actual diff + commit +
-     repo PR template + linked issue. Real Markdown prose: what changed, why
-     it changed, user/developer impact, root cause when it is a fix, and the
-     checks used to validate it. Follow the target repo's conventions; no
-     forced language or prefix. When using the `gh` CLI fallback, write the
-     body to a temp file so real newlines survive the command line.
-10. **Fork / cross-repo.**
-    - Detect fork semantics early (preflight `origin` URL vs the target
-      repo; `gh pr view --json isCrossRepository`). If the head repo differs
-      from the target repo, do not assume a same-repo PR.
-    - Push the branch to the fork remote (`git push -u <fork-remote>
-      <branch>`), then create the PR against the target repo with
-      `gh pr create --draft --head <fork-owner>:<branch> --repo
-      <target-owner>/<target-repo>` (or a connector flow that supports
-      cross-repo heads).
-    - If fork semantics cannot be resolved reliably, **fail closed**: report
-      the limitation instead of assuming same-repo.
-11. **Summarize.**
-    - Branch, commit SHA, PR target, validation run, and anything the user
-      still needs to confirm.
+1. **Resolve the target.** Same-repo publish targets the current checkout's
+   remote. A fork contribution needs your fork as a remote: if none exists
+   yet, create the fork (`gh repo fork <upstream-repo>`) and use the fork
+   remote it sets up (or `git remote add fork <fork-url>`). If fork
+   semantics cannot be resolved reliably (whose fork, which target repo),
+   **fail closed**: report the ambiguity instead of assuming a same-repo PR.
+2. **Inspect the working tree.** `git status --porcelain` plus the actual
+   diff before staging anything. Prefer the bundled read-only
+   `scripts/publish-preflight.mjs` for deterministic scope evidence (git
+   root, branch, remotes, staged/unstaged/untracked files, partially staged
+   files, diff stat, ahead/behind). Its signals flag *that* the tree needs
+   inspection; scope is always judged from the actual diff and task intent.
+3. **Identify the intended scope.** Which files belong to this task?
+   Untracked files are neither auto-included nor auto-excluded. **Never
+   default to `git add -A` on a mixed worktree** — stage explicit paths, or
+   `git add -p` for specific hunks. Never blindly re-add a partially staged
+   file (porcelain `MM`): that would sweep the user's unstaged hunks in. If
+   task-owned changes cannot be reliably separated from unrelated user
+   changes, stop before any remote write and report the scope ambiguity.
+4. **Branch.** Stay on a suitable feature branch; from a default branch
+   (main/master/...) create one — `dsh/<short-description>` unless the
+   repository documents its own convention.
+5. **Stage and commit.** Stage only the intended changes; commit with a
+   terse message derived from the actual diff and task intent, following
+   the repository's conventions. Never bypass git hooks (`--no-verify` is
+   off-limits).
+6. **Verify.** Run only the most relevant checks for the touched area
+   (test/typecheck/lint/build); do not globally install large toolchains
+   just because a tool is missing.
+7. **Push.** Push to the branch's tracked remote when one exists,
+   otherwise the resolved target remote — never assume the remote is named
+   `origin`; if no push remote resolves, stop and report the blocker. A
+   fork contribution pushes the branch to the fork remote
+   (`git push -u <fork-remote> <branch>`). No `--force` unless the user
+   explicitly requested it and the risk is stated.
+8. **Open a draft PR.** Draft unless the user asked for a
+   ready-for-review PR.
+   - **Check for an existing PR first** (`gh pr view --json number,url`).
+     If the branch already has a PR, do **not** create a second one —
+     report it and continue on that PR.
+   - Prefer a visible session PR-create capability when one matches;
+     otherwise `gh pr create --draft --fill --head <current-branch>`, and
+     for a fork `--head <fork-owner>:<branch> --repo <target-owner>/<repo>`.
+     Write the PR body to a temp file so real newlines survive the command
+     line.
+   - Derive `base` from the user request or the remote default branch
+     (`gh repo view --json defaultBranchRef`). Body: real Markdown prose —
+     what changed, why, user/developer impact, root cause when it is a fix,
+     and the checks used to validate it.
+9. **Summarize.** Branch, commit SHA, PR target, validation run, and
+   anything the user still needs to confirm.
 
 ## Write safety
 
-- Never stage unrelated user changes silently.
-- Never push without confirming scope when the worktree is mixed.
+- Never stage unrelated user changes silently; never push a mixed worktree
+  with unconfirmed scope.
 - Default to a draft PR.
-- If the repository does not appear connected to an accessible GitHub
-  remote, stop and explain the blocker.
 - Merging and branch deletion are never part of this flow; they remain
   explicit user actions.
+- If no accessible GitHub remote can be resolved, stop and explain the
+  blocker.

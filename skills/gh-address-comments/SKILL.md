@@ -1,91 +1,56 @@
 ---
 name: gh-address-comments
-description: Address actionable GitHub pull request review feedback. Use when the user wants to inspect unresolved review threads, requested changes, or inline review comments on a PR, then implement selected fixes locally.
-whenToUse: User asks about PR review feedback, requested changes, inline comments, or says "address the review" or "fix the review comments".
+description: Address GitHub pull request review feedback: inspect unresolved review threads and requested changes with thread-aware reads (resolved/outdated state, inline anchors), classify what is actionable, implement the selected fixes locally, and report. Use when the user wants to work through PR review comments, requested changes, or says "address the review".
 ---
 
 # GitHub PR Comment Handler
 
-Use this skill when the user wants to work through requested changes on a
-GitHub pull request. Treat thread-aware review data as a `gh api graphql`
-problem unless a visible DSH capability genuinely preserves
-`reviewThreads` state (resolved/outdated/anchors). Flat comment surfaces
-never contain the full review-thread state.
+Work through requested changes on a GitHub pull request. Thread-aware review
+data is a `gh api graphql` problem unless a session capability genuinely
+preserves `reviewThreads` state (resolved/outdated/anchors) — flat comment
+surfaces never do.
 
-All `gh` commands run through the normal tool boundary (no shell string
-interpolation, argv only). If CLI auth is missing, run `gh auth status`
-and ask the user to authenticate with `gh auth login` if it fails.
+If `gh` auth is missing or fails mid-run, check `gh auth status` and ask the
+user to run `gh auth login`; report the blocker (missing scope, missing PR
+context, CLI auth) instead of guessing a root cause.
 
 ## Workflow
 
-1. **Resolve the PR.**
-   - Repo + PR number/URL from the user: use directly.
-   - "Current branch PR": resolve local git context, then
-     `gh pr view --json number,url,headRepositoryOwner,headRepository`.
-   - If still ambiguous, ask for the repo or PR identifier.
-
-2. **Fetch the complete review context.**
-   - Use a visible DSH GitHub capability for PR metadata and patch context
-     when it exists.
-   - Use the bundled `scripts/fetch-review-threads.mjs` whenever the task
-     depends on unresolved threads, inline review locations, or resolution
-     state. It fetches `reviewThreads`, `isResolved`, `isOutdated`, and
-     file/line/diffSide anchors via authenticated `gh api graphql`.
-   - A thread with more than 100 comments is reported with
-     `commentsTruncated: true` plus its `commentsPageInfo`; do not treat
-     such a thread's comment list as complete.
-   - Keep the three layers distinct:
-     - **conversation comments** (top-level issue comments on the PR),
-     - **reviews** (submissions: APPROVED / CHANGES_REQUESTED / COMMENTED),
-     - **reviewThreads** (inline threads, each with its own comments).
-   - Never collapse threads into flat comments and never claim thread state
-     from a flat read.
-
-3. **Classify every thread.**
-   - `actionable` — asks for a concrete change.
-   - `informational` — question or note; no code change required.
-   - `approval` — approving review, not a request.
-   - `already resolved` — `isResolved: true`.
-   - `outdated` — `isOutdated: true` (comment on old code).
-   - `duplicate` — same feedback elsewhere.
-   - `ambiguous` — cannot tell what is wanted.
-
-4. **Cluster actionable threads.**
-   - Group by file or behavior area.
-   - Keep each change traceable to the thread or cluster it addresses.
-
+1. **Resolve the PR.** Repo + PR number/URL from the user, or the current
+   branch (local git context, then `gh pr view --json number,url`). Ask if
+   still ambiguous.
+2. **Fetch the complete review context.** Use a visible session capability
+   for PR metadata and patch context when one exists. Use the bundled
+   `scripts/fetch-review-threads.mjs` whenever the task depends on
+   unresolved threads, inline locations, or resolution state. Keep three
+   layers distinct:
+   - **conversation comments** (top-level issue comments),
+   - **reviews** (APPROVED / CHANGES_REQUESTED / COMMENTED submissions),
+   - **reviewThreads** (inline threads with `isResolved` / `isOutdated` and
+     file/line anchors).
+   A thread reported with `commentsTruncated: true` is not complete. Never
+   collapse threads into flat comments or claim thread state from a flat
+   read.
+3. **Classify every thread:** actionable (asks for a concrete change),
+   informational, approval, already resolved (`isResolved`), outdated
+   (`isOutdated`), duplicate, or ambiguous.
+4. **Cluster actionable threads** by file or behavior area; keep each change
+   traceable to the thread or cluster it addresses.
 5. **Implement.**
-   - If the user said "address all the review" / "fix the review
-     comments", that is authorization to modify local code for every
-     unresolved actionable thread. Do not mechanically re-ask "may I start".
-   - If the user only asked to look at the review, analyze only — no edits.
-   - If a comment asks for an explanation rather than code, draft the
-     response instead of forcing a code change.
+   - "Address the review" / "fix the review comments" authorizes local edits
+     for every unresolved actionable thread — do not mechanically re-ask.
+   - Analysis-only requests ("look at the review") get analysis only.
+   - A comment asking for an explanation gets a drafted response, not a
+     forced code change.
    - If threads conflict or a change would cause a regression, surface the
      tradeoff before editing.
-
-6. **Verify.**
-   - Run the most relevant checks for the changed code
-     (test/typecheck/lint/build that matches the touched area).
-   - Never claim verification you did not run.
-
-7. **Report.**
-   - `addressed` threads (with file/line), `intentionally not addressed`
-     and why, `ambiguous` items, tests/checks run, and remaining risk.
-   - Local modifications are **not** GitHub writes: unless the user
-     explicitly asked to reply, resolve threads, submit a review, push, or
-     update the PR, do none of those. Stop at the local result.
+6. **Verify** with the most relevant checks for the touched area
+   (test/typecheck/lint/build). Never claim verification you did not run.
+7. **Report** addressed threads (with file/line), intentionally unaddressed
+   and why, ambiguous items, checks run, and remaining risk.
 
 ## Remote write boundary
 
-| Action | Allowed without an explicit ask? |
-|---|---|
-| Edit local code | Yes, for actionable threads under "address the review" |
-| Reply / comment on GitHub | No |
-| Resolve a review thread | No |
-| Submit a review | No |
-| Push / update PR | No |
-
-If `gh` hits auth or rate-limit issues mid-run, report the blocker
-(missing scope / missing PR context / CLI auth) and ask for the missing
-identifier or a refreshed `gh auth login`; do not guess a root cause.
+Local edits are not GitHub writes. Unless the user explicitly asked to
+reply, resolve threads, submit a review, push, or update the PR, do none of
+those — stop at the local result.

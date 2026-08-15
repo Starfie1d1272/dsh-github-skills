@@ -5,6 +5,53 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.2.0] - 2026-08-16
+
+### Changed
+
+- **Routing and responsibility boundaries rewritten.** All four SKILL.md
+  files replaced with compressed, high-signal prompts focused on the routing
+  contract and safety invariants rather than edge-case coverage. Total body
+  text reduced from 383 to 238 lines (−38%).
+- **Removed `whenToUse` from all four SKILL.md files.** DSH's model-facing
+  skill catalog (`@deepseek-ai/dsh-tool-skill@0.1.0-rc.6`) renders only
+  `name` + `description` for skill selection; `whenToUse` is validated and
+  stored by the registry but never reaches the model. Routing triggers are
+  now carried entirely by the `description` field, which is the sole
+  model-visible selection signal. A new structure test enforces this.
+- **Fork-based contributions routed to `gh-publish`.** The umbrella and
+  `gh-publish` descriptions now explicitly include fork workflows (fork
+  creation, fork remote, cross-repo PR). Previously "Publish local changes"
+  and "from the local checkout" in `gh-publish`'s description caused the
+  model to exclude external-repository contributions, leaving the umbrella
+  to handle them ad-hoc.
+- **Simplified capability-agnostic language.** The umbrella no longer
+  enumerates specific DSH provider names and tool names (`dsh-github-workflow`,
+  `dsh-github`, `dsh-github-connector`) — the model must detect whatever is
+  in the live catalog, not match a hardcoded list. The capability matrix in
+  `references/capability-matrix.md` retains the provider reference for
+  humans.
+
+### Removed
+
+- `whenToUse` frontmatter field from all four skills (dead in the DSH
+  catalog).
+- Numbered "Strict order" steps from `gh-publish` (replaced by a flat
+  workflow with inline safety rules).
+- Inputs/prerequisites section from `gh-fix-ci` (inlined into the workflow).
+- Remote write boundary table from `gh-address-comments` (replaced by one
+  sentence).
+- Connector-first responsibilities list and output expectations section
+  from the umbrella (absorbed into the routing and triage sections).
+
+### Tests
+
+- Added `whenToUse`-absence assertion to the structure test: every SKILL.md
+  must have no `whenToUse` field, with a comment citing the DSH catalog
+  contract.
+
 ## [0.1.2] - 2026-08-15
 
 ### Changed
