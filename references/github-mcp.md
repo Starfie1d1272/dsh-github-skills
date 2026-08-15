@@ -73,10 +73,11 @@ After the profile boots with the MCP entry, the GitHub tools appear in the
 session's tool catalog under server-qualified names
 `mcp__github__<tool>` (e.g. `mcp__github__create_pull_request`). Verify by
 checking that the running session's catalog actually lists the
-`mcp__github__*` tools (e.g. via the session tool list, or `dsh --profile
-<profile> --dump-config` showing the mcp row). Only tools the model can
-actually observe are usable; a server that fails to connect registers
-nothing.
+`mcp__github__*` tools (e.g. via the session tool list). `dsh --profile
+<profile> --dump-config` only proves that the MCP instance is configured;
+actual visibility must be confirmed from the running session's tool
+catalog. Only tools the model can actually observe are usable — a server
+that fails to connect or synchronize registers nothing.
 
 ## How the core skills use them
 

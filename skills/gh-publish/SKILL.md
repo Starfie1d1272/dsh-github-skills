@@ -5,10 +5,11 @@ description: Publish task-scoped changes to GitHub through a branch/commit/push/
 
 # GitHub Publish
 
-Publish task-scoped changes to GitHub as a pull request, including
-fork-based external contributions. This is the only flow in the pack that
-performs remote writes by design: the publish request itself is the
-explicit intent.
+Remote publication is this skill's primary purpose, so the user's
+requested publish scope defines which remote steps are authorized: push
+task-scoped changes and, when requested, open a pull request. Pushing
+does not imply opening a PR. Fork-based external contributions follow the
+same flow from a checkout of the target repository lineage.
 
 Branching and committing are internal steps here, not entry points: use
 this skill when the user wants changes pushed or a PR opened.
@@ -32,19 +33,23 @@ this skill when the user wants changes pushed or a PR opened.
    area.
 6. **Push.** Push to the appropriate tracked or fork remote; never assume
    `origin`. No force push unless explicitly requested, with the risk
-   stated.
-7. **Open PR.** Check for an existing PR first. Use correct
-   target/base/head and fork semantics. Draft is the default unless the
-   user explicitly wants ready-for-review. Prefer a suitable visible
-   PR-create capability; `gh` fallback. Body from the actual diff,
-   template, and validation.
-8. **Verify published result.** Re-read the PR and verify target/base/
-   head, changed-file scope, and available checks. If the published state
-   differs from the intended scope, report it — do not declare success.
-9. **Report.** Branch, commit, PR, validation/check state, and any
-   uncertainty.
+   stated. If the user's requested publish scope ends at push, verify the
+   pushed branch, report the result, and stop — do not open a PR.
+7. **Open PR, when requested.** Check for an existing PR first. Use
+   correct target/base/head and fork semantics. Draft is the default
+   unless the user explicitly wants ready-for-review. Prefer a suitable
+   visible PR-create capability; `gh` fallback. Body from the actual
+   diff, template, and validation.
+8. **Verify published result.** Verify the remote branch after push.
+   When a PR was opened or updated, also re-read it and verify
+   target/base/head, changed-file scope, and available checks. If the
+   published state differs from the intended scope, report it — do not
+   declare success.
+9. **Report.** Branch, commit, PR (when applicable), validation/check
+   state, and any uncertainty.
 
 ## Safety
 
 - Never publish unrelated or ambiguous changes.
+- Opening a PR requires its own intent; pushing alone never creates one.
 - Merging and branch deletion require separate explicit intent.

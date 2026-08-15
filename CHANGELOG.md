@@ -72,6 +72,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   clarifies that "current branch" resolves to its associated PR; branch-only
   Actions runs without a PR are outside the workflow (README examples
   updated to match).
+- **Push-only publish scope (final consistency fix).** `gh-publish` is a
+  remote-publication flow whose authorized steps come from the user's
+  requested publish scope: if the scope ends at push, step 6 verifies the
+  pushed branch, reports, and stops — it never opens a PR. Step 7 became
+  "Open PR, when requested", and step 8 verifies the remote branch and,
+  when a PR was opened or updated, re-reads it (target/base/head,
+  changed-file scope, available checks). The stale "only flow in the pack
+  that performs remote writes" claim was removed (other skills also perform
+  authorized remote writes). `references/routing-fixture.md` gained a
+  push-only case ("push this branch, don't open a PR" → `gh-publish`, push
+  then stop).
 - **`whenToUse` omitted from all four skills (optional field).** The rc.6
   model-facing catalog renders `name` + `description` only; routing-critical
   information therefore lives in `description`. DSH SkillSummary still

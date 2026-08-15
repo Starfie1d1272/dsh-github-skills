@@ -15,6 +15,7 @@ repository never claim to prove routing.
 | 4 | "fork 外部仓库改 README 然后开 PR" / "Fork an external repo, change its README, open a PR" | `gh-publish` |
 | 5 | "修完 review 然后 push" / "Fix the review, then push" | `gh-address-comments` + `gh-publish` |
 | 6 | "修 CI 后提交 PR" / "Fix CI, then open a PR" | `gh-fix-ci` + `gh-publish` |
+| 7 | "把这个 branch push 上去就行，先别开 PR" / "Push this branch, don't open a PR" | `gh-publish` (push, then stop — no PR) |
 
 ## Mixed requests
 
