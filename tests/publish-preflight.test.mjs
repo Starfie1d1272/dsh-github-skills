@@ -73,6 +73,28 @@ test('staged-only repo', () => {
   }
 })
 
+test('partially staged file (porcelain MM) appears in both lists and flags mixed', () => {
+  const tmp = tempDir('pp-mm')
+  try {
+    const repo = initGitRepo(tmp.dir)
+    writeFile(repo.dir, 'a.txt', 'line1\n')
+    commitAll(repo, 'init')
+    // Stage one change, then modify the same file again unstaged.
+    writeFile(repo.dir, 'a.txt', 'line1\nline2\n')
+    repo.run(['add', 'a.txt'])
+    writeFile(repo.dir, 'a.txt', 'line1\nline2\nline3\n')
+    const status = repo.run(['status', '--porcelain'])
+    assert.ok(status.startsWith('MM'), `expected MM porcelain, got: ${status}`)
+    const out = parseStdoutJson(runPreflight(repo.dir))
+    assert.deepEqual(out.stagedFiles, ['a.txt'], 'staged hunk tracked')
+    assert.deepEqual(out.unstagedFiles, ['a.txt'], 'unstaged hunk tracked separately')
+    assert.equal(out.mixedWorktree, true, 'MM file must flag a mixed worktree')
+    assert.ok(out.warnings.length >= 0)
+  } finally {
+    tmp.clean()
+  }
+})
+
 test('untracked-only repo', () => {
   const tmp = tempDir('pp-untracked')
   try {

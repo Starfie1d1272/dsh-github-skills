@@ -100,6 +100,7 @@ provenance reference.
 | 5 | Single connector preference | Multiple DSH provider compatibility (PerryLink/dsh-github, kaziii/dsh-github-connector, ZariaEcho/dsh-github-workflow, ...) | DSH ecosystem has several providers; the pack must work with any combination |
 | 6 | "Ask user to approve" prose inside the skill | DSH host approval boundary: analysis vs. remote write is decided by explicit user intent plus the DSH approval gate | DSH owns approval policy; the skill must not fake its own |
 | 7 | Plugin ships a large resident instruction set | No resident system-prompt injection; skills load only on invocation (progressive disclosure) | DSH skill catalog is name+description until invoked |
+| 8 | Current-branch PR review reads use the **head** repo (`headRepositoryOwner`/`headRepository`) | `fetch-review-threads.mjs` resolves the **target** repo from the PR canonical URL, falling back to the head repo only for same-repo PRs | A fork PR's reviewThreads belong to the target repository; `gh` exposes no `baseRepository` JSON field, so the PR URL (always target) is the reliable source. Intentional correction of an upstream fork-PR issue |
 
 ## How the four skills map
 

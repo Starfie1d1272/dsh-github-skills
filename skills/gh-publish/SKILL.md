@@ -32,6 +32,16 @@ request itself is the explicit intent.
 3. **Identify the intended scope.**
    - Which files belong to this task? If the tree is mixed, separate
      task-owned paths from unrelated user changes.
+   - **Partially staged files** (same path staged AND unstaged, porcelain
+     `MM`): the already-staged content is a scope candidate, but re-running
+     `git add <file>` would sweep the user's unstaged hunks in too. Never
+     blindly re-add such a file. Stage only what you can attribute to the
+     task (e.g. `git add -p` for specific hunks); if the hunks cannot be
+     reliably separated, stop before any remote publish and report the
+     scope ambiguity.
+   - **Untracked files** are not automatically irrelevant and not
+     automatically in scope: include them only when they clearly belong to
+     the task, and say so.
 4. **Branch strategy.**
    - If already on a suitable feature branch, stay on it.
    - If on a default branch (main/master/...), create a new branch. Suggest
@@ -54,11 +64,20 @@ request itself is the explicit intent.
      tool is missing; use the project's existing package workflow when one
      exists.
 8. **Push.**
-   - `git push -u origin <current-branch>` — only after the user asked for
+   - Push to the branch's **tracked remote** when one exists (preflight
+     `upstream`, e.g. `origin/feature`), otherwise to `origin`. Never assume
+     the remote is named `origin`; if no push remote can be resolved, stop
+     and report the blocker.
+   - `git push -u <remote> <current-branch>` — only after the user asked for
      the publish flow.
    - No `--force` unless the user explicitly requests it and you state the
      risk.
 9. **Open a draft PR.**
+   - **Check for an existing PR first:** `gh pr view --json number,url`.
+     If the current branch already has a PR, do **not** create a second one
+     — report it and continue on that PR (or ask the user whether to update
+     it). Creating a duplicate PR is a remote write the user did not ask
+     for.
    - Default to **draft** unless the user asked for a ready-for-review PR.
    - Prefer an existing DSH GitHub PR-create capability if visible
      (`gh_create_draft_pr`, `github_pr_create`, `pr_create`, ...).
@@ -70,11 +89,19 @@ request itself is the explicit intent.
      repo PR template + linked issue. Real Markdown prose: what changed, why
      it changed, user/developer impact, root cause when it is a fix, and the
      checks used to validate it. Follow the target repo's conventions; no
-     forced language or prefix.
+     forced language or prefix. When using the `gh` CLI fallback, write the
+     body to a temp file so real newlines survive the command line.
 10. **Fork / cross-repo.**
-    - If the head repo differs from the target repo, detect fork semantics
-      and do not assume a same-repo PR. Use `gh pr create` for cross-repo
-      heads rather than a connector PR flow that assumes one repository.
+    - Detect fork semantics early (preflight `origin` URL vs the target
+      repo; `gh pr view --json isCrossRepository`). If the head repo differs
+      from the target repo, do not assume a same-repo PR.
+    - Push the branch to the fork remote (`git push -u <fork-remote>
+      <branch>`), then create the PR against the target repo with
+      `gh pr create --draft --head <fork-owner>:<branch> --repo
+      <target-owner>/<target-repo>` (or a connector flow that supports
+      cross-repo heads).
+    - If fork semantics cannot be resolved reliably, **fail closed**: report
+      the limitation instead of assuming same-repo.
 11. **Summarize.**
     - Branch, commit SHA, PR target, validation run, and anything the user
       still needs to confirm.

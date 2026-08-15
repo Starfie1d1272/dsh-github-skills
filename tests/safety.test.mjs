@@ -17,7 +17,7 @@ import { test } from 'node:test'
 
 import {
   createFakeGh, createFakeGit, initGitRepo, parseStdoutJson, readLog,
-  runScript, SCRIPTS, tempDir, writeFile,
+  ROOT, runScript, SCRIPTS, tempDir, writeFile,
 } from './helpers.mjs'
 
 const FAKE_TOKEN = 'ghp_fake_secret_1234567890'
@@ -151,6 +151,24 @@ test('mixed worktree detection: preflight flags it and no helper runs git add -A
   } finally {
     tmp.clean()
   }
+})
+
+test('gh-publish SKILL covers the conformance edge rules', () => {
+  const publish = readFileSync(join(ROOT, 'skills/gh-publish/SKILL.md'), 'utf8')
+  // Partially staged files must not be blindly re-added (GAP #2).
+  assert.ok(/partially staged/i.test(publish), 'must document partially staged files')
+  assert.ok(/MM/.test(publish), 'must reference the MM porcelain state')
+  assert.ok(/git add -p|specific hunks/.test(publish), 'must offer hunk-level staging for MM files')
+  assert.ok(/scope ambiguity/.test(publish), 'must fail closed on unstaged-hunk ambiguity')
+  // Existing PR on the branch must not be duplicated (GAP #3).
+  assert.ok(/existing PR|already has a PR/i.test(publish), 'must check for an existing PR before creating')
+  assert.ok(/do \*\*not\*\* create a second one/i.test(publish), 'must forbid duplicate PR creation')
+  // Push must not hard-code origin (GAP #4).
+  assert.ok(/tracked remote|upstream/.test(publish), 'must prefer the branch tracked remote')
+  assert.ok(/never assume\s+the remote/i.test(publish), 'must not hard-code origin')
+  // Fork publish must push to the fork remote and fail closed (GAP #5).
+  assert.ok(/fork-remote|fork remote/.test(publish), 'must push to the fork remote for fork PRs')
+  assert.ok(/fail closed/.test(publish), 'must fail closed when fork semantics are unclear')
 })
 
 test('helper argv is passed as separate arguments, never a shell string', () => {

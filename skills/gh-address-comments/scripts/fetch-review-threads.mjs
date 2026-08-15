@@ -15,7 +15,8 @@
  *                                 [--gh-bin <path>]
  *
  * With no --pr, the PR associated with the current branch is resolved via
- * `gh pr view` (works for cross-repo PRs by reading head repo owner/name).
+ * `gh pr view`, targeting the PR's repository (target repo, not the fork
+ * head) so review-thread queries are always correct for fork PRs.
  *
  * stdout: one stable JSON document. stderr: diagnostics only.
  * Exit codes: 0 ok, 1 error (auth, GraphQL, malformed output).
@@ -142,14 +143,30 @@ function ensureAuthenticated(ghBin) {
   throw new Error(message || 'gh auth status failed; run `gh auth login` to authenticate the GitHub CLI')
 }
 
-/** Resolve {owner, repo, number} for the current branch PR (cross-repo aware). */
+/**
+ * Resolve {owner, repo, number} for the current branch PR (cross-repo aware).
+ *
+ * A pull request object — including its reviewThreads — belongs to its
+ * TARGET repository. `gh pr view` exposes the HEAD repository, which for a
+ * fork PR is the fork; querying review threads through the head repo would
+ * return the wrong pullRequest (or none). The canonical PR URL always points
+ * at the target repository, so it is preferred; the head repo is used only
+ * as a same-repository fallback when the URL is unavailable.
+ */
 export function resolveCurrentBranchPr(ghBin) {
-  const data = runJson([ghBin, 'pr', 'view', '--json', 'number,headRepositoryOwner,headRepository'])
+  const data = runJson([ghBin, 'pr', 'view', '--json', 'number,url,headRepositoryOwner,headRepository'])
+  const number = data?.number
+  if (!Number.isInteger(number)) {
+    throw new Error('no PR associated with the current branch (gh pr view returned no PR number)')
+  }
+  const fromUrl = typeof data?.url === 'string' ? parsePrUrl(data.url) : undefined
+  if (fromUrl !== undefined && fromUrl.number === number) {
+    return { owner: fromUrl.owner, repo: fromUrl.repo, number }
+  }
   const owner = data?.headRepositoryOwner?.login
   const repo = data?.headRepository?.name
-  const number = data?.number
-  if (typeof owner !== 'string' || typeof repo !== 'string' || !Number.isInteger(number)) {
-    throw new Error('no PR associated with the current branch (gh pr view returned no head repo/number)')
+  if (typeof owner !== 'string' || typeof repo !== 'string') {
+    throw new Error('no PR associated with the current branch (gh pr view returned no target/head repo)')
   }
   return { owner, repo, number }
 }

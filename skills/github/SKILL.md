@@ -26,6 +26,12 @@ This pack is intentionally hybrid and capability-agnostic:
   review-thread state via GraphQL, and GitHub Actions log inspection.
 - Never pretend a capability exists. Only call a tool whose name is actually
   in your current catalog. If none matches, fall back to `gh`/`git`.
+- **Tool-name collisions across providers:** the `gh_*` prefix appears in
+  more than one provider (e.g. `dsh-github-workflow` and `dsh-github`), and
+  their tools are not interchangeable. Match on the **exact full tool name
+  plus its parameter signature and description**, and pick the tool whose
+  documented capability matches the current need. A same-prefix name from
+  another provider is not a reason to call it.
 - Keep connector state and the local checkout aligned: if the request is
   about the current branch, resolve the local repo and branch first.
 

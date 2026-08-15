@@ -39,3 +39,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Helpers are read-only (except the publish flow itself, which is the
   explicit user intent).
 - No `gh auth token` usage; credentials never reach output.
+
+### Fixed (Codex upstream conformance audit)
+
+- **Fork-PR review-thread resolution (high):** current-branch PR resolution
+  now targets the repository that owns the PR (canonical PR URL) instead of
+  the fork head repo, so reviewThreads queries never hit the wrong
+  repository.
+- **Partially staged files (medium):** `gh-publish` now documents that an
+  `MM` file must never be blindly re-`git add`ed; stage specific hunks or
+  report scope ambiguity.
+- **Existing PR on branch (medium):** `gh-publish` now checks `gh pr view`
+  first and never creates a duplicate PR.
+- **Non-origin remotes (medium):** push now prefers the branch's tracked
+  remote (preflight `upstream`) instead of hard-coding `origin`.
+- **Fork publish (low):** documented pushing to the fork remote and
+  `gh pr create --head <fork>:<branch> --repo <target>`, failing closed when
+  fork semantics are unclear.
+- **Umbrella tool-name collisions (low):** documented exact full-name +
+  signature matching for `gh_*` tools shared across providers.
+- Added `references/codex-conformance.md` with the pinned upstream baselines
+  and the full behavior matrices.

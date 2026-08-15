@@ -4,6 +4,8 @@
  */
 
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { createFakeGh, parseStdoutJson, runScript, SCRIPTS, tempDir } from './helpers.mjs'
@@ -110,18 +112,52 @@ test('--pr as a full URL resolves owner/repo from the URL', () => {
   }
 })
 
-test('current-branch PR resolution via gh pr view (cross-repo aware)', () => {
-  const tmp = tempDir('frt-current')
+test('fork PR: current-branch resolution targets the PR repository, not the fork head', () => {
+  const tmp = tempDir('frt-fork')
   try {
+    // Head repo is the fork (alice/demo); the PR belongs to acme/demo.
     const { script: gh } = createFakeGh(tmp.dir, {
-      prView: { status: 0, stdout: JSON.stringify({ number: 7, headRepositoryOwner: { login: 'fork-user' }, headRepository: { name: 'demo' } }) },
+      prView: {
+        status: 0,
+        stdout: JSON.stringify({
+          number: 42,
+          url: 'https://github.com/acme/demo/pull/42',
+          headRepositoryOwner: { login: 'alice' },
+          headRepository: { name: 'demo' },
+        }),
+      },
+      graphql: [graphqlPage({ number: 42 })],
+    })
+    const result = runScript(SCRIPTS.fetchReviewThreads, ['--gh-bin', gh])
+    assert.equal(result.status, 0, result.stderr)
+    const out = parseStdoutJson(result)
+    assert.equal(out.pullRequest.number, 42)
+    // The GraphQL query must hit the TARGET repository, not the fork head.
+    assert.equal(out.pullRequest.owner, 'acme')
+    assert.equal(out.pullRequest.repo, 'demo')
+    const log = readFileSync(join(tmp.dir, '.invocations.log'), 'utf8')
+    const graphqlCall = log.trim().split('\n').map((line) => JSON.parse(line)).find((argv) => argv[0] === 'api' && argv[1] === 'graphql')
+    assert.ok(graphqlCall !== undefined, 'graphql call must exist')
+    assert.ok(graphqlCall.includes('owner=acme') && graphqlCall.includes('repo=demo'), 'graphql must target acme/demo')
+    assert.ok(!graphqlCall.includes('owner=alice'), 'graphql must not target the fork head repo')
+  } finally {
+    tmp.clean()
+  }
+})
+
+test('current-branch resolution falls back to the head repo when no URL is available', () => {
+  const tmp = tempDir('frt-current-fallback')
+  try {
+    // Same-repo PR without a url field (older gh behavior): head repo == target.
+    const { script: gh } = createFakeGh(tmp.dir, {
+      prView: { status: 0, stdout: JSON.stringify({ number: 7, headRepositoryOwner: { login: 'acme' }, headRepository: { name: 'demo' } }) },
       graphql: [graphqlPage({ number: 7 })],
     })
     const result = runScript(SCRIPTS.fetchReviewThreads, ['--gh-bin', gh])
     assert.equal(result.status, 0, result.stderr)
     const out = parseStdoutJson(result)
     assert.equal(out.pullRequest.number, 7)
-    assert.equal(out.pullRequest.owner, 'fork-user')
+    assert.equal(out.pullRequest.owner, 'acme')
     assert.equal(out.pullRequest.repo, 'demo')
   } finally {
     tmp.clean()
