@@ -82,9 +82,9 @@ dsh plugin --profile web add ./dsh-github-skills-0.1.0.tgz
 
 ---
 
-**Availability note:** the npm install commands above become valid with the
-`v0.1.0` release (the package is not published yet). The GitHub commit-pin and
-local tarball paths work today.
+**Availability:** npm installation is available in released versions
+starting with `v0.1.0`. For unreleased commits, use the GitHub commit-pin or
+local tarball installation paths.
 
 ## Uninstall
 

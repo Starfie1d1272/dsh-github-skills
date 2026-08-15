@@ -68,7 +68,7 @@ dsh plugin --profile web add ./dsh-github-skills-0.1.0.tgz
 
 ---
 
-**状态说明：** 上述 npm 安装命令在 `v0.1.0` 发布后生效（当前尚未发布）。GitHub commit-pin 与本地 tarball 路径今天即可用。
+**可用性：** npm 安装方式从正式发布的 `v0.1.0` 起可用；对于尚未发布的提交，请使用 GitHub commit pin 或本地 tarball 安装。
 
 ## 卸载
 

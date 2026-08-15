@@ -4,14 +4,19 @@ name: Release
 # verifies the tag against package.json and publishes to the official npm
 # registry using the OIDC-issued identity — no NPM_TOKEN, no secrets.
 #
-# Registry-side setup required ONCE (manual, by a maintainer with npm access):
-#   npm trust github
-#   # then follow the interactive flow to authorize:
-#   #   repository: Starfie1d1272/dsh-github-skills
-#   #   workflow:    release.yml
-#   #   allowed action: npm publish
-# (npm `trust` requires npm >= 11.15.0; the workflow pins npm >= 11.5.1 for
-# the publish step. See https://docs.npmjs.com/generating-provenance-statements)
+# FIRST-RELEASE BOOTSTRAP (v0.1.0): npm's `npm trust` requires the package to
+# already exist on the registry, so the very first publish cannot use
+# Trusted Publishing. v0.1.0 must be published ONCE manually:
+#   npm publish --access public
+# AFTER the package exists, configure Trusted Publishing (npm >= 11.15.0):
+#   npm trust github dsh-github-skills \
+#     --repo Starfie1d1272/dsh-github-skills \
+#     --file release.yml \
+#     --allow-publish
+# From the next version (v0.1.1) onward, pushing a v* tag runs this workflow
+# and publishes automatically via OIDC, with npm provenance.
+# See https://docs.npmjs.com/cli/v11/commands/npm-trust and
+# https://docs.npmjs.com/trusted-publishers for the current rules.
 #
 # The tag push does not match ci.yml (`branches: [main]`), so this workflow
 # re-runs the full validation (tests, package validation, and the
