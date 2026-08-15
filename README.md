@@ -136,6 +136,14 @@ After installation, just say:
 "Fork awesome-foo, update its README, and open a PR" → gh-publish
 ```
 
+Mixed requests may load multiple specialists — complete review or CI work
+before publishing:
+
+```text
+"Fix the review comments, then push"     → gh-address-comments + gh-publish
+"Fix CI, then open a PR"                 → gh-fix-ci + gh-publish
+```
+
 ## Safety
 
 See [references/safety-model.md](references/safety-model.md) for the normative
@@ -175,12 +183,19 @@ skills/<name>/SKILL.md  four skills; catalog renders name + description only, bo
 skills/*/scripts/       zero-dependency Node helpers (thread reads, CI evidence,
                         publish preflight)
 references/             capability matrix, safety model, upstream notes,
-                        conformance record
+                        conformance record, GitHub MCP reference, routing fixture
 ```
 
 The only code is the shim: it registers the four SKILL.md bundles on
 `ctx.skills` (bundled rank, lazy body reload, directory `resourceBase`). It
 registers no GitHub API tools and manages no credentials.
+
+**Optional GitHub MCP:** GitHub's official MCP server can be wired into DSH
+as an additional structured capability source. The skills then pick its
+tools by semantics like any other visible capability. See
+[references/github-mcp.md](references/github-mcp.md) for the DSH profile
+configuration; this package does not configure MCP servers or manage
+credentials.
 
 ## Ecosystem relations
 

@@ -113,6 +113,13 @@ profile 的 `dsh.profile.bundles` 列表由官方插件管理器自动 reconcile
 "Fork awesome-foo，更新 README，然后开 PR" → gh-publish
 ```
 
+混合请求可能同时加载多个专家——先完成 review 或 CI 域工作，再发布：
+
+```text
+"修完 review 意见然后 push"           → gh-address-comments + gh-publish
+"修好 CI 再开 PR"                     → gh-fix-ci + gh-publish
+```
+
 ## 安全
 
 规范性规则见 [references/safety-model.md](references/safety-model.md)。要点：
@@ -136,10 +143,13 @@ profile 的 `dsh.profile.bundles` 列表由官方插件管理器自动 reconcile
 lib/index.js            极薄 bundle shim：注册只读 SkillProvider
 skills/<name>/SKILL.md  四个 Skill；catalog 仅 name+description，body 按需加载
 skills/*/scripts/       零依赖 Node helpers（thread 读取、CI 证据、publish preflight）
-references/             能力矩阵、安全模型、上游笔记、conformance 记录
+references/             能力矩阵、安全模型、上游笔记、conformance 记录、
+                        GitHub MCP 参考、routing fixture
 ```
 
 唯一代码是 shim：把四个 SKILL.md bundle 注册到 `ctx.skills`（bundled rank、惰性重读 body、directory `resourceBase`）。不注册 GitHub API 工具、不管凭据。
+
+**可选 GitHub MCP：** GitHub 官方 MCP server 可接入 DSH 作为额外的结构化能力来源；Skill 会像对待任何可见能力一样按语义选用其工具。DSH profile 配置见 [references/github-mcp.md](references/github-mcp.md)；本包不配置 MCP server，也不管理凭据。
 
 ## 与现有项目的关系
 

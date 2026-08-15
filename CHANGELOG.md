@@ -14,43 +14,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Routing and responsibility boundaries rewritten.** All four SKILL.md
   files replaced with compressed, high-signal prompts focused on the routing
   contract and safety invariants rather than edge-case coverage. Total body
-  text reduced from 383 to 238 lines (−38%).
-- **Removed `whenToUse` from all four SKILL.md files.** DSH's model-facing
-  skill catalog (`@deepseek-ai/dsh-tool-skill@0.1.0-rc.6`) renders only
-  `name` + `description` for skill selection; `whenToUse` is validated and
-  stored by the registry but never reaches the model. Routing triggers are
-  now carried entirely by the `description` field, which is the sole
-  model-visible selection signal. A new structure test enforces this.
-- **Fork-based contributions routed to `gh-publish`.** The umbrella and
-  `gh-publish` descriptions now explicitly include fork workflows (fork
-  creation, fork remote, cross-repo PR). Previously "Publish local changes"
-  and "from the local checkout" in `gh-publish`'s description caused the
-  model to exclude external-repository contributions, leaving the umbrella
-  to handle them ad-hoc.
-- **Simplified capability-agnostic language.** The umbrella no longer
-  enumerates specific DSH provider names and tool names (`dsh-github-workflow`,
-  `dsh-github`, `dsh-github-connector`) — the model must detect whatever is
-  in the live catalog, not match a hardcoded list. The capability matrix in
-  `references/capability-matrix.md` retains the provider reference for
-  humans.
+  text reduced from 383 (v0.1.2) to **194 lines (−49%)**; the GLM design
+  draft landed at 238, and the final pass kept the compression while fixing
+  routing semantics.
+- **Resident descriptions re-compressed.** The rc.6 model-facing skill
+  catalog renders `name` + `description` for skill selection
+  (`@deepseek-ai/dsh-tool-skill@0.1.0-rc.6` emits `- name: description`
+  entries under a 500-char host cap), so the description is the primary
+  router. The final pass re-compressed the descriptions from the GLM draft
+  (total 1467 chars; `github` alone was 458) to a resident budget of
+  ≤300 chars each (total **772** — below v0.1.2's 851). The `github`
+  description no longer restates the specialists' full routing table; all
+  four descriptions appear together in the catalog.
+- **Mixed specialist composition.** Removed the "mixed requests follow
+  their widest specialist path" rule. A mixed request may require multiple
+  specialists: complete review or CI domain work before publishing, and
+  `gh-publish` does not replace `gh-address-comments` / `gh-fix-ci`.
+  Documented in the umbrella, `references/routing-fixture.md`, and the
+  README quick start.
+- **External-contribution routing corrected (target-checkout semantics).**
+  `gh-publish` step 1 now requires that the local checkout belong to the
+  target repository lineage: same repo → the relevant existing checkout;
+  external contribution → create/reuse the user's fork and work from a
+  checkout/worktree of the target repository lineage — never continue from
+  an unrelated checkout. The GLM draft described "adding a fork remote to
+  the current checkout", which produces an incorrect Git topology when the
+  current checkout is unrelated to the target repository.
+- **Capability abstraction hardened.** Core SKILL.md files no longer name
+  specific community providers/tools (`ci_diagnose`, `dsh-ci-doctor`, ...):
+  use the most specific visible capability whose documented semantics cover
+  the need; provider names and tool-name prefixes do not imply capability.
+  A structure test enforces this.
+- **Post-publish verification restored as a completion invariant.**
+  `gh-publish` step 8 re-reads the created/updated PR and verifies
+  target/base/head, changed-file scope, and available checks; a mismatch is
+  reported instead of declaring success.
+- **Low-level prompt plumbing removed from `gh-publish`.** Dropped the
+  preflight output-field list, the porcelain `MM` tutorial, the `git add -A`
+  accident wording, and the fork-remote / `gh` command tutorials; the
+  numbered 9-step workflow is retained (scope → branch → commit → verify →
+  push → PR → verify published result) with the semantics kept: scope from
+  actual diff + task intent, task-owned staging, selective staging of mixed
+  hunks, stop on ambiguity, tracked/fork remote, no force by default,
+  existing-PR check, draft default, cross-repo semantics, no merge/delete
+  by implication.
+- **`whenToUse` omitted from all four skills (optional field).** The rc.6
+  model-facing catalog renders `name` + `description` only; routing-critical
+  information therefore lives in `description`. DSH SkillSummary still
+  supports optional `whenToUse` metadata, so its absence here is a design
+  choice, not a permanent schema requirement — and the structure test no
+  longer asserts that it must be absent.
+- **Optional GitHub MCP reference added.** `references/github-mcp.md`
+  documents wiring GitHub's official MCP server into DSH
+  (`@deepseek-ai/dsh-mcp-client`, stdio / streamable-http), env-only
+  credentials, read-only/limited toolsets, the context cost of
+  over-registered schemas, visibility verification, and semantics-based
+  tool selection. README links to it briefly; no PAT/YAML/setup detail
+  lives in the four SKILL.md files.
 
 ### Removed
 
-- `whenToUse` frontmatter field from all four skills (dead in the DSH
-  catalog).
-- Numbered "Strict order" steps from `gh-publish` (replaced by a flat
-  workflow with inline safety rules).
 - Inputs/prerequisites section from `gh-fix-ci` (inlined into the workflow).
 - Remote write boundary table from `gh-address-comments` (replaced by one
   sentence).
 - Connector-first responsibilities list and output expectations section
   from the umbrella (absorbed into the routing and triage sections).
+- Provider/tool-name enumeration from all four SKILL.md bodies (capability
+  selection is semantics-first).
+- The `whenToUse`-absence structure assertion (absence is optional, not a
+  schema requirement).
 
 ### Tests
 
-- Added `whenToUse`-absence assertion to the structure test: every SKILL.md
-  must have no `whenToUse` field, with a comment citing the DSH catalog
-  contract.
+- Structure tests now validate stable contracts instead of exact English
+  phrases: descriptions parse and are meaningful; every description fits the
+  project's resident budget (≤300 chars); the umbrella references all three
+  specialists; the `gh-publish` description carries fork/external +
+  publish/PR semantics; no SKILL.md hardcodes known community
+  provider/tool names; helper references resolve; safety concepts remain
+  present (task-owned staging, stop-on-ambiguity, draft default,
+  report-only external CI, evidence-backed root cause, remote-write
+  boundary).
+- Added `references/routing-fixture.md`: six expected-routing examples
+  (including two mixed requests). Static tests do not claim to prove LLM
+  routing; the fixture documents how to run a real model-routing smoke as
+  observational, non-deterministic evidence.
 
 ## [0.1.2] - 2026-08-15
 
