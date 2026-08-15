@@ -70,8 +70,9 @@ test('packed package.json declares the DSH bundle contract', () => {
   const { tmp, tarball } = pack()
   try {
     const manifest = JSON.parse(execFileSync('tar', ['-xOf', tarball, 'package/package.json'], { encoding: 'utf8' }))
+    const localManifest = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
     assert.equal(manifest.name, 'dsh-github-skills')
-    assert.equal(manifest.version, '0.1.0')
+    assert.equal(manifest.version, localManifest.version, 'packed version must equal the working-tree version')
     assert.equal(manifest.dsh.bundle.patch, './cordis.patch.yml')
     assert.equal(manifest.type, 'module')
     assert.equal(manifest.main, 'lib/index.js')
