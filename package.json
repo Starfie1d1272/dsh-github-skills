@@ -1,6 +1,6 @@
 {
   "name": "dsh-github-skills",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Skill-first GitHub workflows for DeepSeek Harness: PR triage, review feedback, CI diagnosis, and safe publishing.",
   "type": "module",
   "license": "Apache-2.0",
