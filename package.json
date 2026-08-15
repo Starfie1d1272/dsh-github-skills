@@ -1,21 +1,19 @@
 {
   "name": "dsh-github-skills",
   "version": "0.1.0",
-  "description": "Connector-agnostic GitHub workflow skills for DeepSeek Harness: PR triage, review feedback, CI diagnosis, and safe publish flows over existing DSH capabilities with gh/git fallbacks.",
+  "description": "Skill-first GitHub workflows for DeepSeek Harness: PR triage, review feedback, CI diagnosis, and safe publishing.",
   "type": "module",
   "license": "Apache-2.0",
   "keywords": [
-    "deepseek-harness",
-    "dsh",
     "dsh-plugin",
     "dsh-skill",
+    "deepseek-harness",
     "github",
-    "git",
-    "pull-request",
-    "code-review",
     "github-actions",
+    "code-review",
+    "agent-skills",
     "developer-tools",
-    "workflow"
+    "git"
   ],
   "engines": {
     "node": "^22.19.0 || >=24.0.0"
