@@ -111,18 +111,24 @@ dsh-github-skills/
 - `gh` CLI（GitHub CLI），已认证（`gh auth status`）用于 GitHub 侧工作
 - `git` 用于本地工作流
 
-安装到 profile（web 是 GUI profile）：
+### 从 npm（npm release 后可用）
 
 ```sh
 dsh plugin --profile web add dsh-github-skills
 ```
 
-或从本地 checkout/tarball：
+包发布到 npm registry 后，这条命令成为主安装方式。
+
+### 从 GitHub / 本地 tarball（当前真实可用）
+
+包尚未发布到 npm，以下是当前安装路径。从本地 checkout：
 
 ```sh
 npm pack
 dsh plugin --profile web add ./dsh-github-skills-0.1.0.tgz
 ```
+
+或直接安装 release 产物中的 tarball。
 
 重启 profile 后，四个 Skill（`github`、`gh-address-comments`、`gh-fix-ci`、`gh-publish`）会出现在模型的 skill catalog 中，并在调用时加载。
 
@@ -156,7 +162,7 @@ dsh plugin --profile web remove dsh-github-skills
 
 ## 兼容性
 
-- 已验证：`@deepseek-ai/dsh` 0.1.0-rc.6（本仓库 CI + install smoke）。
+- 已验证：`@deepseek-ai/dsh` 0.1.0-rc.6（本仓库 CI 在 Node 22.19 与 Node 24 上运行完整单元/安全测试套件 + 真实 disposable-profile 安装 smoke）。
 - 支持 Node 22.19+ 与 Node 24。
 - 本包**不**声称兼容所有 DSH 版本；install smoke 把契约钉在它所验证的版本上。
 - Skill 按设计 connector-agnostic：随宿主会话暴露的 GitHub/Git 能力自适应，在 DSH provider 生态演进时继续可用。

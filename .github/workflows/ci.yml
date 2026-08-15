@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22.19.0', '24']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm (profile plugin manager used by the install smoke)
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.21.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # The install smoke boots a real disposable DSH profile through the
+      # actual `dsh` CLI, pinned to the reviewed rc.6 baseline.
+      - name: Install DSH rc.6 (pinned baseline)
+        run: npm install -g @deepseek-ai/dsh@0.1.0-rc.6
+
+      - name: Unit, safety, and structure tests
+        run: npm test
+
+      - name: Package validation (npm pack allowlist + isolated install)
+        run: npm run pack:check
+
+      - name: Disposable-profile install smoke (real dsh plugin add + skill discovery)
+        run: npm run test:smoke
+
+      - name: Verify packed tarball is present
+        run: |
+          node -e "const m = require('./package.json'); if (m.version !== '0.1.0') throw new Error('version drift')"
+          git status --porcelain

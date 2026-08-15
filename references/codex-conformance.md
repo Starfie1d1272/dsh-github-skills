@@ -153,6 +153,26 @@ All gaps found in this audit were closed in the same audit:
 Remaining known differences are all intentional (matrices above). No
 critical or high gaps remain.
 
+## Post-conformance adversarial hardening
+
+The conformance audit proves workflow-semantic parity; the adversarial
+hardening pass fixed issues that are NOT Codex-conformance gaps — they are
+either upstream-equivalent behavior with boundary bugs, DSH-specific helper
+bugs, security hardening, or release engineering. They are tracked here so
+they are not re-labeled as conformance regressions later:
+
+| Category | Issue | Fix |
+|---|---|---|
+| security | credential-bearing https remote URL leaked to stdout | `lib/redact.mjs` applied to every helper output path (URL userinfo + token shapes) |
+| security | pasted tokens in remote content (comments, CI logs) and gh/git stderr | same redaction with stable placeholders; safety-model wording corrected |
+| helper bug | unequal pagination re-appended finished collections | per-collection independent paginators with own cursors |
+| helper bug | thread comments >100 silently truncated | explicit `commentsTruncated` + `commentsPageInfo` |
+| helper bug | generic `/runs/<id>` misdetected as Actions | strict `/actions/runs/<id>` detection (github.com + GHES) |
+| helper bug | run/job queries bound to implicit cwd repo | explicit `-R <owner/repo>` target context everywhere |
+| helper semantics | `mixedWorktree` too narrow | objective class signals + redefined conservative flag |
+| mock quality | fake returned pages by call count | protocol-aware fake (cursor matching, `-R` verification, fail loud) |
+| release eng | no CI, npm-install README overstated | `.github/workflows/ci.yml` (Node 22.19/24), truthful install sections, metadata, `prepublishOnly` |
+
 ## Maintaining conformance
 
 - Re-pin the baselines when a new audit runs; record the public commit SHA,

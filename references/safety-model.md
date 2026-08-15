@@ -20,6 +20,23 @@ written into:
 Helper scripts print **stable JSON on stdout** and diagnostics only on
 stderr. Any output that could contain a credential is a bug.
 
+**Untrusted remote content is treated as untrusted.** PR comments, review
+thread bodies, CI logs, and gh/git diagnostics are third-party-controlled
+input and may contain pasted credentials. This package makes no promise that
+arbitrary internet input can never contain a secret; instead:
+
+- it **never actively extracts** a raw credential (no `gh auth token`, no
+  token parsing, no credential storage);
+- every helper output path runs **conservative redaction** (`lib/redact.mjs`)
+  before anything reaches stdout/stderr, covering known GitHub token shapes
+  (`ghp_`/`gho_`/`ghu_`/`ghs_`/`ghr_`/`github_pat_`) and https remote URL
+  userinfo (password redacted, `git@` ssh forms untouched);
+- redacted material is replaced with a stable placeholder
+  (`[REDACTED_GITHUB_TOKEN]`, `[REDACTED_PASSWORD]`,
+  `[REDACTED_CREDENTIAL]`) so the model still sees *that* a credential was
+  present, never the credential itself;
+- redaction is deliberately narrow: ordinary prose is never rewritten.
+
 ### 2. No token extraction
 
 Do not call `gh auth token` to lift a token out of `gh`. Normal runtime never
@@ -132,6 +149,13 @@ The test suite must prove at least:
   invoked);
 - `publish-preflight.mjs` performs zero writes;
 - a fake token never appears in stdout/stderr;
+- credential-bearing remote URLs (https userinfo with a token) never reach
+  stdout/stderr, while ssh `git@` forms stay intact;
+- secret-like material pasted into remote content (PR comments, CI logs) and
+  into gh/git error stderr is redacted with a stable placeholder;
 - a mixed worktree never triggers `git add -A`;
 - helper argv never passes through a shell string (no shell interpolation);
-- external CI checks are never treated as GitHub Actions logs.
+- external CI checks (including generic `/runs/<id>` URLs) are never treated
+  as GitHub Actions logs;
+- all repo-bound gh queries carry an explicit `-R <owner/repo>` context that
+  matches the PR's target repository, never the implicit cwd repository.

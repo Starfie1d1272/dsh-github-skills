@@ -31,6 +31,9 @@ and ask the user to authenticate with `gh auth login` if it fails.
      depends on unresolved threads, inline review locations, or resolution
      state. It fetches `reviewThreads`, `isResolved`, `isOutdated`, and
      file/line/diffSide anchors via authenticated `gh api graphql`.
+   - A thread with more than 100 comments is reported with
+     `commentsTruncated: true` plus its `commentsPageInfo`; do not treat
+     such a thread's comment list as complete.
    - Keep the three layers distinct:
      - **conversation comments** (top-level issue comments on the PR),
      - **reviews** (submissions: APPROVED / CHANGES_REQUESTED / COMMENTED),

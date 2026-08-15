@@ -7,8 +7,19 @@
  *   - review submissions (APPROVED / CHANGES_REQUESTED / COMMENTED)
  *   - inline review threads with resolved/outdated state and file/line anchors
  *
+ * Pagination design: each collection (comments / reviews / reviewThreads) is
+ * paginated by its OWN GraphQL query with its OWN cursor, so collections of
+ * unequal length finish independently and are never re-read from page one.
+ *
+ * A single thread's comments are fetched with `comments(first: 100)`; when a
+ * thread has more than 100 comments the helper does NOT silently truncate —
+ * it records `commentsTruncated: true` plus the thread's `commentsPageInfo`
+ * and the result must not be claimed complete for that thread.
+ *
  * This is a read-only workflow helper. It never writes to GitHub, never
- * outputs credentials, and never touches `gh auth token`.
+ * outputs credentials, and never touches `gh auth token`. All output passes
+ * through conservative credential redaction (untrusted comment bodies may
+ * contain pasted tokens).
  *
  * Usage:
  *   node fetch-review-threads.mjs [--repo owner/name] [--pr <number|url>]
@@ -19,55 +30,60 @@
  * head) so review-thread queries are always correct for fork PRs.
  *
  * stdout: one stable JSON document. stderr: diagnostics only.
- * Exit codes: 0 ok, 1 error (auth, GraphQL, malformed output).
+ * Exit codes: 0 ok, 1 error (auth, GraphQL, malformed output), 2 usage.
  */
 
 import { spawnSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 
-const QUERY = `query(
-  $owner: String!,
-  $repo: String!,
-  $number: Int!,
-  $commentsCursor: String,
-  $reviewsCursor: String,
-  $threadsCursor: String
-) {
+import { redact } from '../../../lib/redact.mjs'
+
+const PR_META_FRAGMENT = `number url title state`
+const PAGE_INFO = `pageInfo { hasNextPage endCursor }`
+
+const QUERY_COMMENTS = `query($owner: String!, $repo: String!, $number: Int!, $cursor: String) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $number) {
-      number
-      url
-      title
-      state
-      comments(first: 100, after: $commentsCursor) {
-        pageInfo { hasNextPage endCursor }
-        nodes {
-          id body createdAt updatedAt author { login }
-        }
+      ${PR_META_FRAGMENT}
+      comments(first: 100, after: $cursor) {
+        ${PAGE_INFO}
+        nodes { id body createdAt updatedAt author { login } }
       }
-      reviews(first: 100, after: $reviewsCursor) {
-        pageInfo { hasNextPage endCursor }
-        nodes {
-          id state body submittedAt author { login }
-        }
+    }
+  }
+}`
+
+const QUERY_REVIEWS = `query($owner: String!, $repo: String!, $number: Int!, $cursor: String) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      ${PR_META_FRAGMENT}
+      reviews(first: 100, after: $cursor) {
+        ${PAGE_INFO}
+        nodes { id state body submittedAt author { login } }
       }
-      reviewThreads(first: 100, after: $threadsCursor) {
-        pageInfo { hasNextPage endCursor }
+    }
+  }
+}`
+
+const QUERY_THREADS = `query($owner: String!, $repo: String!, $number: Int!, $cursor: String) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      ${PR_META_FRAGMENT}
+      reviewThreads(first: 100, after: $cursor) {
+        ${PAGE_INFO}
         nodes {
           id isResolved isOutdated path line diffSide
           startLine startDiffSide originalLine originalStartLine
           resolvedBy { login }
           comments(first: 100) {
-            nodes {
-              id body createdAt updatedAt author { login }
-            }
+            ${PAGE_INFO}
+            nodes { id body createdAt updatedAt author { login } }
           }
         }
       }
     }
   }
-}
-`
+}`
 
 export function parseArgs(argv) {
   const args = { repo: undefined, pr: undefined, ghBin: 'gh' }
@@ -111,7 +127,11 @@ export function parsePrUrl(url) {
   return { owner: match[1], repo: match[2], number: Number(match[3]) }
 }
 
-/** Run a command with argv only (no shell interpolation) and capture output. */
+/**
+ * Run a command with argv only (no shell interpolation) and capture output.
+ * stdout/stderr are redacted so diagnostics and data never carry raw
+ * credential-shaped material.
+ */
 function run(argv, options = {}) {
   const result = spawnSync(argv[0], argv.slice(1), {
     encoding: 'utf8',
@@ -120,7 +140,11 @@ function run(argv, options = {}) {
     maxBuffer: options.maxBuffer ?? 64 * 1024 * 1024,
   })
   if (result.error !== undefined) throw new Error(`failed to run ${argv[0]}: ${result.error.message}`)
-  return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' }
+  return {
+    status: result.status,
+    stdout: redact(result.stdout ?? ''),
+    stderr: redact(result.stderr ?? ''),
+  }
 }
 
 function runJson(argv, options = {}) {
@@ -209,7 +233,7 @@ export function resolveTarget(args, ghBin) {
   return { owner, repo, number }
 }
 
-function graphqlPage(ghBin, { owner, repo, number }, cursors) {
+function graphqlQuery(ghBin, { owner, repo, number }, query, cursor) {
   const argv = [
     ghBin, 'api', 'graphql',
     '-F', 'query=@-',
@@ -217,25 +241,26 @@ function graphqlPage(ghBin, { owner, repo, number }, cursors) {
     '-F', `repo=${repo}`,
     '-F', `number=${number}`,
   ]
-  if (cursors.comments !== undefined) argv.push('-F', `commentsCursor=${cursors.comments}`)
-  if (cursors.reviews !== undefined) argv.push('-F', `reviewsCursor=${cursors.reviews}`)
-  if (cursors.threads !== undefined) argv.push('-F', `threadsCursor=${cursors.threads}`)
-  const payload = runJson(argv, { input: QUERY })
+  if (cursor !== undefined) argv.push('-F', `cursor=${cursor}`)
+  const payload = runJson(argv, { input: query })
   if (Array.isArray(payload.errors) && payload.errors.length > 0) {
     throw new Error(`GitHub GraphQL errors:\n${JSON.stringify(payload.errors, null, 2)}`)
   }
   return payload
 }
 
-/** Fetch every page of comments, reviews, and threads. Pure logic, no I/O beyond gh. */
-export function fetchAll(ghBin, target) {
-  const conversationComments = []
-  const reviews = []
-  const reviewThreads = []
-  const cursors = { comments: undefined, reviews: undefined, threads: undefined }
-  let pullRequest = undefined
+/**
+ * Paginate ONE collection with its own cursor until hasNextPage is false.
+ * A finished collection is never requested again, so unequal-length
+ * collections cannot re-read page one.
+ */
+function paginateCollection(ghBin, target, query, fieldName) {
+  const all = []
+  let cursor
+  let pageInfo
+  let pullRequest
   for (;;) {
-    const payload = graphqlPage(ghBin, target, cursors)
+    const payload = graphqlQuery(ghBin, target, query, cursor)
     const pr = payload?.data?.repository?.pullRequest
     if (pr === undefined || pr === null) {
       throw new Error(`GitHub GraphQL returned no pull request for ${target.owner}/${target.repo}#${target.number}`)
@@ -250,21 +275,49 @@ export function fetchAll(ghBin, target) {
         repo: target.repo,
       }
     }
-    conversationComments.push(...(pr.comments?.nodes ?? []))
-    reviews.push(...(pr.reviews?.nodes ?? []))
-    reviewThreads.push(...(pr.reviewThreads?.nodes ?? []))
-    // A collection that reports hasNextPage:false gets its cursor cleared so
-    // later pages never re-request (and re-append) an already-finished list.
-    cursors.comments = pr.comments?.pageInfo?.hasNextPage === true ? pr.comments.pageInfo.endCursor : undefined
-    cursors.reviews = pr.reviews?.pageInfo?.hasNextPage === true ? pr.reviews.pageInfo.endCursor : undefined
-    cursors.threads = pr.reviewThreads?.pageInfo?.hasNextPage === true ? pr.reviewThreads.pageInfo.endCursor : undefined
-    if (cursors.comments === undefined && cursors.reviews === undefined && cursors.threads === undefined) break
+    const page = pr[fieldName]
+    all.push(...(page?.nodes ?? []))
+    pageInfo = page?.pageInfo
+    if (pageInfo?.hasNextPage === true) {
+      cursor = pageInfo.endCursor
+    } else {
+      break
+    }
   }
+  return { items: all, pageInfo, pullRequest }
+}
+
+/** Fetch every page of comments, reviews, and threads independently. */
+export function fetchAll(ghBin, target) {
+  // PR metadata rides the first (comments) query.
+  const comments = paginateCollection(ghBin, target, QUERY_COMMENTS, 'comments')
+  const reviews = paginateCollection(ghBin, target, QUERY_REVIEWS, 'reviews')
+  const threads = paginateCollection(ghBin, target, QUERY_THREADS, 'reviewThreads')
+
+  const pullRequest = comments.pullRequest ?? {
+    number: target.number,
+    url: null,
+    title: null,
+    state: null,
+    owner: target.owner,
+    repo: target.repo,
+  }
+  const reviewThreads = threads.items.map((thread) => {
+    const threadComments = thread.comments?.nodes ?? []
+    const hasMore = thread.comments?.pageInfo?.hasNextPage === true
+    return {
+      ...thread,
+      comments: { nodes: threadComments },
+      commentsTruncated: hasMore,
+      commentsPageInfo: thread.comments?.pageInfo ?? null,
+    }
+  })
+
   return {
     schemaVersion: 1,
-    pullRequest: pullRequest ?? null,
-    conversationComments,
-    reviews,
+    pullRequest,
+    conversationComments: comments.items,
+    reviews: reviews.items,
     reviewThreads,
   }
 }

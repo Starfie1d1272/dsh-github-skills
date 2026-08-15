@@ -163,18 +163,26 @@ Requirements:
 - `gh` CLI (GitHub CLI), authenticated (`gh auth status`) for GitHub-side work
 - `git` for local workflows
 
-Install into a profile (web is the GUI profile):
+### From npm (available after npm release)
 
 ```sh
 dsh plugin --profile web add dsh-github-skills
 ```
 
-Or from a local checkout/tarball:
+This becomes the primary install path once the package is published to the
+npm registry.
+
+### From GitHub / local tarball (currently available)
+
+The package is not yet published to npm; this is the current install path.
+From a local checkout:
 
 ```sh
 npm pack
 dsh plugin --profile web add ./dsh-github-skills-0.1.0.tgz
 ```
+
+or install the tarball produced by the release artifacts directly.
 
 Restart the profile, then the four skills appear in the model's skill
 catalog (`github`, `gh-address-comments`, `gh-fix-ci`, `gh-publish`) and
@@ -216,8 +224,9 @@ normative rules. Highlights:
 
 ## Compatibility
 
-- Verified against `@deepseek-ai/dsh` 0.1.0-rc.6 (this repo's CI + install
-  smoke).
+- Verified against `@deepseek-ai/dsh` 0.1.0-rc.6 (this repo's CI runs the
+  full unit/safety suite plus a real disposable-profile install smoke on
+  Node 22.19 and Node 24).
 - Node 22.19+ and Node 24 are the supported runtime range.
 - The pack does **not** claim compatibility with every DSH version; the
   install smoke test pins the contract to the version it verifies.

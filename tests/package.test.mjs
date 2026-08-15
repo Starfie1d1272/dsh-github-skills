@@ -34,6 +34,7 @@ test('npm pack succeeds and contains every required path', () => {
     const required = [
       'package/package.json',
       'package/lib/index.js',
+      'package/lib/redact.mjs',
       'package/cordis.patch.yml',
       'package/README.md',
       'package/README.zh-CN.md',

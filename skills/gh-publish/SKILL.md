@@ -28,7 +28,11 @@ request itself is the explicit intent.
    - Prefer the bundled read-only `scripts/publish-preflight.mjs` for
      deterministic scope evidence: git root, branch, detached state,
      default branch, origin/upstream, staged/unstaged/untracked files,
-     diff stat, ahead/behind, and a `mixedWorktree` flag.
+     `partiallyStagedFiles`, diff stat, ahead/behind, and the objective
+     change-class signals (`hasStaged`/`hasUnstaged`/`hasUntracked`,
+     `multipleChangeClasses`, `scopeNeedsInspection`, `mixedWorktree`).
+     These signals flag *that* the tree mixes change classes; they never
+     decide scope — judge scope from the actual diff and task intent.
 3. **Identify the intended scope.**
    - Which files belong to this task? If the tree is mixed, separate
      task-owned paths from unrelated user changes.

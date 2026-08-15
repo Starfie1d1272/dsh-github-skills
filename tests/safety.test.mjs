@@ -26,7 +26,7 @@ test('fetch-review-threads performs no remote writes (invocation log audit)', ()
   const tmp = tempDir('safety-frt')
   try {
     const { script: gh } = createFakeGh(tmp.dir, {
-      graphql: [{ data: { repository: { pullRequest: { number: 1, url: 'u', title: 't', state: 'OPEN', comments: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] }, reviews: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] }, reviewThreads: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] } } } } }],
+      graphql: { comments: [], reviews: [], threads: [] },
     })
     const result = runScript(SCRIPTS.fetchReviewThreads, ['--repo', 'acme/demo', '--pr', '1', '--gh-bin', gh], {
       env: { GITHUB_TOKEN: FAKE_TOKEN, GH_TOKEN: FAKE_TOKEN },
@@ -40,6 +40,7 @@ test('fetch-review-threads performs no remote writes (invocation log audit)', ()
       assert.ok(['auth', 'api'].includes(argv[0]), `unexpected gh surface: ${argv.join(' ')}`)
       assert.equal(argv[0] === 'api' && argv[1] !== 'graphql', false, `unexpected api target: ${argv.join(' ')}`)
       assert.ok(!argv.some((a) => /-X|POST|PATCH|DELETE|PUT/i.test(a)), `mutation flag present: ${argv.join(' ')}`)
+      assert.ok(!(argv[0] === 'auth' && argv[1] === 'token'), 'gh auth token must never be invoked')
     }
   } finally {
     tmp.clean()
@@ -53,7 +54,10 @@ test('inspect-pr-checks performs no remote writes (invocation log audit)', () =>
     writeFile(repo.dir, 'a.txt', 'a\n')
     repo.run(['add', '-A'])
     repo.run(['commit', '-m', 'init'])
+    repo.run(['remote', 'add', 'origin', 'https://github.com/acme/demo.git'])
     const { script: gh } = createFakeGh(tmp.dir, {
+      expectedRepo: 'acme/demo',
+      repoView: { status: 0, stdout: JSON.stringify({ nameWithOwner: 'acme/demo' }) },
       checks: { status: 0, stdout: JSON.stringify([{ name: 'x', state: 'FAILURE', conclusion: 'failure', detailsUrl: 'https://github.com/acme/demo/actions/runs/1' }]) },
       runView: { status: 0, stdout: JSON.stringify({ conclusion: 'failure' }) },
       runLog: { status: 0, stdout: 'error: boom\n' },
@@ -66,7 +70,6 @@ test('inspect-pr-checks performs no remote writes (invocation log audit)', () =>
     for (const line of log.split('\n')) {
       const argv = JSON.parse(line)
       assert.ok(['auth', 'pr', 'run', 'repo', 'api'].includes(argv[0]), `unexpected gh surface: ${argv.join(' ')}`)
-      if (argv[0] === 'api') assert.equal(argv[1], 'graphql', `api without graphql is unexpected: ${argv.join(' ')}`)
       assert.ok(!argv.some((a) => /-X|POST|PATCH|DELETE|PUT/i.test(a)), `mutation flag present: ${argv.join(' ')}`)
       assert.ok(!(argv[0] === 'auth' && argv[1] === 'token'), 'gh auth token must never be invoked')
     }
@@ -113,7 +116,11 @@ test('a fake token in the environment never appears in helper output', () => {
       // Even a hostile gh response quoting the token must not reach our output
       // as credential material; env tokens must never be echoed.
       auth: { status: 0, stdout: `logged in with ${FAKE_TOKEN}\n` },
-      graphql: [{ data: { repository: { pullRequest: { number: 1, url: 'u', title: 't', state: 'OPEN', comments: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [{ id: 'c1', body: 'see config', createdAt: 'd', updatedAt: 'd', author: { login: 'a' } }] }, reviews: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] }, reviewThreads: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] } } } } }],
+      graphql: {
+        comments: [{ cursor: undefined, page: { nodes: [{ id: 'c1', body: 'see config', createdAt: 'd', updatedAt: 'd', author: { login: 'a' } }], pageInfo: { hasNextPage: false, endCursor: null } } }],
+        reviews: [],
+        threads: [],
+      },
     })
     const result = runScript(SCRIPTS.fetchReviewThreads, ['--repo', 'acme/demo', '--pr', '1', '--gh-bin', gh], {
       env: { GITHUB_TOKEN: FAKE_TOKEN, GH_TOKEN: FAKE_TOKEN, GH_ENTERPRISE_TOKEN: FAKE_TOKEN },
@@ -175,7 +182,7 @@ test('helper argv is passed as separate arguments, never a shell string', () => 
   const tmp = tempDir('safety-argv')
   try {
     const { script: gh } = createFakeGh(tmp.dir, {
-      graphql: [{ data: { repository: { pullRequest: { number: 1, url: 'u', title: 't', state: 'OPEN', comments: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] }, reviews: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] }, reviewThreads: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] } } } } }],
+      graphql: { comments: [], reviews: [], threads: [] },
     })
     const result = runScript(SCRIPTS.fetchReviewThreads, ['--repo', 'acme/demo', '--pr', '1', '--gh-bin', gh])
     assert.equal(result.status, 0, result.stderr)
@@ -214,8 +221,10 @@ test('external CI is never log-diagnosed (no run/log surfaces called)', () => {
     writeFile(repo.dir, 'a.txt', 'a\n')
     repo.run(['add', '-A'])
     repo.run(['commit', '-m', 'init'])
+    repo.run(['remote', 'add', 'origin', 'https://github.com/acme/demo.git'])
     // No runView/runLog/repoView/jobLog scenarios: any such call fails loudly.
     const { script: gh } = createFakeGh(tmp.dir, {
+      expectedRepo: 'acme/demo',
       checks: { status: 0, stdout: JSON.stringify([{ name: 'circleci', state: 'FAILURE', detailsUrl: 'https://app.circleci.com/pipelines/acme/1' }]) },
     })
     const result = runScript(SCRIPTS.inspectPrChecks, ['--repo', repo.dir, '--pr', '1', '--json', '--gh-bin', gh])
@@ -225,7 +234,7 @@ test('external CI is never log-diagnosed (no run/log surfaces called)', () => {
     assert.equal(out.failingChecks[0].status, 'external')
     const log = readFileSync(join(tmp.dir, '.invocations.log'), 'utf8')
     assert.ok(!log.includes('"run"'), 'run surface must never be called for external CI')
-    assert.ok(!log.includes('"repo"'), 'repo view must never be called for external CI')
+    assert.ok(!log.includes('"api"'), 'Actions job-log API must never be called for external CI')
   } finally {
     tmp.clean()
   }

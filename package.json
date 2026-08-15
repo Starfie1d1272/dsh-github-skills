@@ -21,6 +21,14 @@
     "node": "^22.19.0 || >=24.0.0"
   },
   "packageManager": "pnpm@11.21.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Starfie1d1272/dsh-github-skills.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Starfie1d1272/dsh-github-skills/issues"
+  },
+  "homepage": "https://github.com/Starfie1d1272/dsh-github-skills#readme",
   "main": "lib/index.js",
   "exports": {
     ".": {
@@ -43,7 +51,8 @@
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "test:smoke": "node tests/install-smoke.mjs",
-    "pack:check": "node tests/package.test.mjs"
+    "pack:check": "node tests/package.test.mjs",
+    "prepublishOnly": "npm test && npm run pack:check"
   },
   "dsh": {
     "bundle": {

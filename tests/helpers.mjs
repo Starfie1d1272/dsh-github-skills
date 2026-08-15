@@ -69,27 +69,81 @@ function respondRequired(key, value) {
   if (value === undefined) respond({ status: 1, stderr: 'fake gh: no ' + key + ' scenario\\n' })
   return value
 }
+// Protocol helpers: read a -F key=value pair and the -R repo binding.
+function flagValue(flag, prefix) {
+  for (let i = 0; i < args.length - 1; i += 1) {
+    if (args[i] === flag && (prefix === undefined || args[i + 1].startsWith(prefix))) return args[i + 1]
+  }
+  return undefined
+}
+function repoBinding() {
+  for (let i = 0; i < args.length - 1; i += 1) {
+    if (args[i] === '-R') return args[i + 1]
+  }
+  return undefined
+}
+function assertRepo() {
+  const expected = SCENARIO.expectedRepo
+  if (expected === undefined) return
+  const actual = repoBinding()
+  if (actual !== expected) {
+    respond({ status: 1, stderr: 'fake gh: repo context mismatch: expected ' + expected + ', got ' + (actual === undefined ? '(none)' : actual) + '\\n' })
+  }
+}
 const sub = args[0]
 if (sub === 'auth') {
   respond(pick('auth') ?? { status: 0 })
 } else if (sub === 'pr' && args[1] === 'view') {
   respond(respondRequired('prView', pick('prView')))
 } else if (sub === 'pr' && args[1] === 'checks') {
+  assertRepo()
   respond(respondRequired('checks', pick('checks')))
 } else if (sub === 'api' && args[1] === 'graphql') {
-  const pages = SCENARIO.graphql
-  if (!Array.isArray(pages) || pages.length === 0) respond({ status: 1, stderr: 'fake gh: no graphql scenario\\n' })
-  const page = pages[Math.min(nextCall('graphql'), pages.length - 1)]
-  respond({ status: 0, stdout: JSON.stringify(page) })
+  // Protocol-aware graphql: scenario.graphql maps each collection to pages
+  // keyed by the cursor actually passed in argv. An unexpected cursor or
+  // collection fails loudly instead of returning a canned page.
+  const coll = stdin.includes('reviewThreads(first') ? 'threads'
+    : stdin.includes('reviews(first') ? 'reviews'
+      : stdin.includes('comments(first') ? 'comments' : undefined
+  const spec = SCENARIO.graphql
+  if (coll === undefined || spec === undefined || typeof spec !== 'object' || !Array.isArray(spec[coll])) {
+    respond({ status: 1, stderr: 'fake gh: no graphql scenario for collection ' + String(coll) + '\\n' })
+  }
+  const cursorKV = flagValue('-F', 'cursor=')
+  const cursor = cursorKV === undefined ? undefined : cursorKV.slice('cursor='.length)
+  const empty = { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } }
+  const page = spec[coll].length === 0
+    ? { page: empty }
+    : spec[coll].find((p) => (p.cursor === undefined ? cursor === undefined : p.cursor === cursor))
+  if (page === undefined) {
+    respond({ status: 1, stderr: 'fake gh: no graphql page for ' + coll + ' cursor=' + String(cursor) + '\\n' })
+  }
+  const numberKV = flagValue('-F', 'number=')
+  const number = numberKV === undefined ? 1 : Number(numberKV.slice('number='.length))
+  const pr = {
+    number, url: 'https://github.com/acme/demo/pull/' + number, title: 't', state: 'OPEN',
+    comments: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] },
+    reviews: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] },
+    reviewThreads: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] },
+  }
+  const field = coll === 'threads' ? 'reviewThreads' : coll
+  pr[field] = page.page
+  respond({ status: 0, stdout: JSON.stringify({ data: { repository: { pullRequest: pr } } }) })
 } else if (sub === 'api') {
   const endpoint = args[1] ?? ''
   if (endpoint.startsWith('/repos/') && endpoint.endsWith('/logs')) {
+    // Job-log endpoint embeds the repo slug; verify it matches expectedRepo.
+    if (SCENARIO.expectedRepo !== undefined && !endpoint.startsWith('/repos/' + SCENARIO.expectedRepo + '/actions/jobs/')) {
+      respond({ status: 1, stderr: 'fake gh: job log endpoint repo mismatch: ' + endpoint + '\\n' })
+    }
     respond(respondRequired('jobLog', pick('jobLog')))
   }
   respond({ status: 1, stderr: 'fake gh: no scenario for api ' + endpoint + '\\n' })
-} else if (sub === 'run' && args[1] === 'view' && args[3] === '--log') {
+} else if (sub === 'run' && args[1] === 'view' && args.includes('--log')) {
+  assertRepo()
   respond(respondRequired('runLog', pick('runLog')))
-} else if (sub === 'run' && args[1] === 'view' && args[3] === '--json') {
+} else if (sub === 'run' && args[1] === 'view' && args.includes('--json')) {
+  assertRepo()
   respond(respondRequired('runView', pick('runView')))
 } else if (sub === 'repo' && args[1] === 'view') {
   respond(respondRequired('repoView', pick('repoView')))
@@ -100,10 +154,16 @@ if (sub === 'auth') {
 
 /**
  * Create a fake `gh` executable in `dir`.
- * Scenario keys: auth, prView, checks, graphql (array of pages), runView,
- * runLog, jobLog, repoView. Any key may be a response object or an array of
- * responses consumed sequentially across calls. Missing keys respond with
- * exit 1, so a script that calls an unexpected gh surface fails loudly.
+ * Scenario keys: auth, prView, checks, graphql, runView, runLog, jobLog,
+ * repoView, expectedRepo.
+ *
+ * `graphql` is protocol-aware: `{ comments: [{cursor, page}], reviews: [...],
+ * threads: [...] }` where `page` is `{nodes, pageInfo}` and `cursor` is the
+ * GraphQL cursor the helper actually passes. A request for an unknown
+ * cursor/collection fails loudly. `expectedRepo` (when set) fails any
+ * repo-bound call (`pr checks`, `run view`, job log) whose `-R` argument
+ * does not match. Missing keys respond with exit 1, so a script that calls
+ * an unexpected gh surface fails loudly.
  */
 export function createFakeGh(dir, scenario) {
   const counters = {}

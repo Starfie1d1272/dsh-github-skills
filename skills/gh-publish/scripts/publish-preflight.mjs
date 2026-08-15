@@ -25,6 +25,8 @@
 import { spawnSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 
+import { redact } from '../../../lib/redact.mjs'
+
 const WRITE_COMMANDS = new Set(['add', 'commit', 'push', 'reset', 'stash', 'checkout', 'switch', 'rm', 'mv', 'clean', 'restore'])
 
 export function parseArgs(argv) {
@@ -65,7 +67,13 @@ function git(args, cwd, options = {}) {
     maxBuffer: 16 * 1024 * 1024,
   })
   if (result.error !== undefined) throw new Error(`failed to run git: ${result.error.message}`)
-  return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' }
+  // stdout/stderr are redacted: a credential-bearing remote URL (e.g.
+  // https://user:TOKEN@github.com/...) must never reach model-visible output.
+  return {
+    status: result.status,
+    stdout: redact(result.stdout ?? ''),
+    stderr: redact(result.stderr ?? ''),
+  }
 }
 
 function gitOk(args, cwd) {
@@ -146,11 +154,27 @@ export function collectPreflight(repoPath) {
   const stagedFiles = status.filter((entry) => isStaged(entry.code)).map((entry) => entry.path)
   const unstagedFiles = status.filter((entry) => isUnstaged(entry.code)).map((entry) => entry.path)
   const untrackedFiles = status.filter((entry) => entry.code.startsWith('?')).map((entry) => entry.path)
+  // A file with BOTH staged and unstaged hunks (porcelain MM/AM/...): never
+  // blindly `git add <file>` it again — that would sweep the unstaged hunks in.
+  const partiallyStagedFiles = status
+    .filter((entry) => isStaged(entry.code) && isUnstaged(entry.code))
+    .map((entry) => entry.path)
 
   const stagedStat = parseNumstat(git(['diff', '--cached', '--numstat'], root).stdout)
   const unstagedStat = parseNumstat(git(['diff', '--numstat'], root).stdout)
 
   const aheadBehind = resolveAheadBehind(root, upstream, branch, origin)
+
+  // Objective change-class signals. `mixedWorktree` is a conservative
+  // heuristic (any two change classes present), never a scope verdict: the
+  // skill must still judge scope from the actual diff and task intent.
+  const hasStaged = stagedFiles.length > 0
+  const hasUnstaged = unstagedFiles.length > 0
+  const hasUntracked = untrackedFiles.length > 0
+  const changeClassCount = Number(hasStaged) + Number(hasUnstaged) + Number(hasUntracked)
+  const multipleChangeClasses = changeClassCount > 1
+  const scopeNeedsInspection = multipleChangeClasses || partiallyStagedFiles.length > 0
+  const mixedWorktree = (hasStaged && hasUnstaged) || (hasStaged && hasUntracked) || (hasUnstaged && hasUntracked)
 
   const warnings = []
   if (detached) warnings.push('detached HEAD: no branch is checked out')
@@ -159,6 +183,8 @@ export function collectPreflight(repoPath) {
   if (untrackedFiles.length > 0) warnings.push(`${untrackedFiles.length} untracked file(s) present`)
   if (aheadBehind !== null && aheadBehind.ahead > 0) warnings.push(`${aheadBehind.ahead} unpushed commit(s) on this branch`)
   if (aheadBehind !== null && aheadBehind.behind > 0) warnings.push(`${aheadBehind.behind} commit(s) behind the remote ref`)
+  if (partiallyStagedFiles.length > 0) warnings.push(`partially staged file(s) need hunk-level attention: ${partiallyStagedFiles.join(', ')}`)
+  if (scopeNeedsInspection) warnings.push('working tree mixes change classes; confirm scope before staging')
 
   return {
     schemaVersion: 1,
@@ -173,9 +199,15 @@ export function collectPreflight(repoPath) {
     stagedFiles,
     unstagedFiles,
     untrackedFiles,
+    partiallyStagedFiles,
+    hasStaged,
+    hasUnstaged,
+    hasUntracked,
+    multipleChangeClasses,
+    scopeNeedsInspection,
     diffStat: { staged: stagedStat, unstaged: unstagedStat },
     aheadBehind,
-    mixedWorktree: stagedFiles.length > 0 && (unstagedFiles.length > 0 || untrackedFiles.length > 0),
+    mixedWorktree,
     warnings,
   }
 }

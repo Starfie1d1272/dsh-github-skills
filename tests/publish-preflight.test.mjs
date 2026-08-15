@@ -263,3 +263,113 @@ test('repo state is untouched: preflight leaves a dirty tree exactly as it was',
     tmp.clean()
   }
 })
+
+test('unstaged + untracked (no staged) now flags a mixed worktree', () => {
+  const tmp = tempDir('pp-unstaged-untracked')
+  try {
+    const repo = initGitRepo(tmp.dir)
+    writeFile(repo.dir, 'a.txt', 'a\n')
+    commitAll(repo, 'init')
+    writeFile(repo.dir, 'a.txt', 'task change\n')
+    writeFile(repo.dir, 'notes.txt', 'unrelated note\n')
+    const out = parseStdoutJson(runPreflight(repo.dir))
+    assert.deepEqual(out.unstagedFiles, ['a.txt'])
+    assert.deepEqual(out.untrackedFiles, ['notes.txt'])
+    assert.equal(out.mixedWorktree, true, 'two change classes without staging must be flagged')
+    assert.equal(out.multipleChangeClasses, true)
+    assert.equal(out.scopeNeedsInspection, true)
+  } finally {
+    tmp.clean()
+  }
+})
+
+test('staged + untracked flags a mixed worktree with objective signals', () => {
+  const tmp = tempDir('pp-staged-untracked')
+  try {
+    const repo = initGitRepo(tmp.dir)
+    writeFile(repo.dir, 'a.txt', 'a\n')
+    commitAll(repo, 'init')
+    writeFile(repo.dir, 'a.txt', 'task change\n')
+    repo.run(['add', 'a.txt'])
+    writeFile(repo.dir, 'extra.txt', 'extra\n')
+    const out = parseStdoutJson(runPreflight(repo.dir))
+    assert.equal(out.hasStaged, true)
+    assert.equal(out.hasUnstaged, false)
+    assert.equal(out.hasUntracked, true)
+    assert.equal(out.multipleChangeClasses, true)
+    assert.equal(out.mixedWorktree, true)
+    assert.equal(out.scopeNeedsInspection, true)
+  } finally {
+    tmp.clean()
+  }
+})
+
+test('single change class keeps mixedWorktree false but exposes the class flags', () => {
+  const tmp = tempDir('pp-single-class')
+  try {
+    const repo = initGitRepo(tmp.dir)
+    writeFile(repo.dir, 'a.txt', 'a\n')
+    commitAll(repo, 'init')
+    writeFile(repo.dir, 'a.txt', 'only unstaged\n')
+    const out = parseStdoutJson(runPreflight(repo.dir))
+    assert.equal(out.hasUnstaged, true)
+    assert.equal(out.hasStaged, false)
+    assert.equal(out.hasUntracked, false)
+    assert.equal(out.multipleChangeClasses, false)
+    assert.equal(out.mixedWorktree, false)
+    assert.equal(out.scopeNeedsInspection, false)
+  } finally {
+    tmp.clean()
+  }
+})
+
+test('credential-bearing remote URL is redacted from stdout', () => {
+  const tmp = tempDir('pp-redact')
+  try {
+    const repo = initGitRepo(tmp.dir)
+    writeFile(repo.dir, 'a.txt', 'a\n')
+    commitAll(repo, 'init')
+    repo.run(['remote', 'add', 'origin', 'https://user:ghp_TOPSECRET1234567890@github.com/acme/demo.git'])
+    const result = runPreflight(repo.dir)
+    assert.equal(result.status, 0, result.stderr)
+    assert.ok(!result.stdout.includes('ghp_TOPSECRET1234567890'), 'token must not appear in stdout')
+    const out = parseStdoutJson(result)
+    assert.equal(out.origin, 'https://user:[REDACTED_PASSWORD]@github.com/acme/demo.git')
+  } finally {
+    tmp.clean()
+  }
+})
+
+test('ssh git@ remote form is not mangled by redaction', () => {
+  const tmp = tempDir('pp-ssh')
+  try {
+    const repo = initGitRepo(tmp.dir)
+    writeFile(repo.dir, 'a.txt', 'a\n')
+    commitAll(repo, 'init')
+    repo.run(['remote', 'add', 'origin', 'git@github.com:acme/demo.git'])
+    const out = parseStdoutJson(runPreflight(repo.dir))
+    assert.equal(out.origin, 'git@github.com:acme/demo.git', 'ssh git@ form must survive untouched')
+  } finally {
+    tmp.clean()
+  }
+})
+
+test('partially staged files are listed explicitly with scopeNeedsInspection', () => {
+  const tmp = tempDir('pp-mm-fields')
+  try {
+    const repo = initGitRepo(tmp.dir)
+    writeFile(repo.dir, 'a.txt', 'line1\n')
+    commitAll(repo, 'init')
+    writeFile(repo.dir, 'a.txt', 'line1\nline2\n')
+    repo.run(['add', 'a.txt'])
+    writeFile(repo.dir, 'a.txt', 'line1\nline2\nline3\n')
+    const out = parseStdoutJson(runPreflight(repo.dir))
+    assert.deepEqual(out.partiallyStagedFiles, ['a.txt'])
+    assert.equal(out.multipleChangeClasses, true, 'MM contributes staged AND unstaged classes')
+    assert.equal(out.scopeNeedsInspection, true, 'MM file must force scope inspection')
+    assert.equal(out.mixedWorktree, true)
+    assert.ok(out.warnings.some((w) => w.includes('partially staged')), 'warning mentions partial staging')
+  } finally {
+    tmp.clean()
+  }
+})
