@@ -1,0 +1,53 @@
+{
+  "name": "dsh-github-skills",
+  "version": "0.1.0",
+  "description": "Connector-agnostic GitHub workflow skills for DeepSeek Harness: PR triage, review feedback, CI diagnosis, and safe publish flows over existing DSH capabilities with gh/git fallbacks.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "dsh-skill",
+    "github",
+    "git",
+    "pull-request",
+    "code-review",
+    "github-actions",
+    "developer-tools",
+    "workflow"
+  ],
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "packageManager": "pnpm@11.21.0",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "skills",
+    "references",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "test:smoke": "node tests/install-smoke.mjs",
+    "pack:check": "node tests/package.test.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

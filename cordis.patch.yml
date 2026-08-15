@@ -1,0 +1,10 @@
+# dsh-github-skills bundle layer: mounts the pack's own shim row.
+#
+# The shim is deliberately minimal: it only registers the four bundled
+# skills on ctx.skills. It registers no GitHub API tools and manages no
+# credentials. All GitHub/Git work happens inside the skills themselves,
+# using whichever DSH capabilities are already visible, with gh/git
+# fallbacks.
+- insert:
+    - id: dsh-github-skills
+      name: 'dsh-github-skills'
