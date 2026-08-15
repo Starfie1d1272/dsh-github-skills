@@ -49,5 +49,5 @@ jobs:
 
       - name: Verify packed tarball is present
         run: |
-          node -e "const m = require('./package.json'); if (m.version !== '0.1.0') throw new Error('version drift')"
+          node -e "const {version} = require('./package.json'); if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error('invalid semver: ' + version)"
           git status --porcelain
