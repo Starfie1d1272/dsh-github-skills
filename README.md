@@ -202,8 +202,12 @@ files are left behind in `~/.dsh`.
 See [references/safety-model.md](references/safety-model.md) for the
 normative rules. Highlights:
 
-- Credentials never enter skill output, logs, temp files, PR bodies,
-  commits, or error messages; `gh auth token` is never invoked.
+- The helpers **never actively extract** a raw credential (`gh auth token`
+  is never invoked) and **never store credentials**; every output path
+  redacts known credential shapes (GitHub token prefixes, https remote URL
+  userinfo) with stable placeholders before model-visible output. Untrusted
+  remote content — comments, CI logs, gh/git stderr — is treated as
+  untrusted and redacted for credential-shaped material.
 - Analysis requests never become writes: "look at the review" does not reply
   or resolve; "why did CI fail" does not push a fix.
 - "Address the review" authorizes **local** edits only; remote writes need

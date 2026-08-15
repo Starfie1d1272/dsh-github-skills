@@ -7,18 +7,21 @@
  * fallback for pending run logs). External CI providers are reported with
  * name/URL/state only — never log-diagnosed.
  *
- * GitHub Actions detection is strict: only canonical Actions URLs
- * (`/actions/runs/<id>`) are treated as Actions. Generic `/runs/<id>` paths
- * (CircleCI, self-hosted CI, ...) are external and never log-diagnosed.
+ * Host context: every query is bound to ONE explicit target
+ * {host, owner, repo} resolved from the PR URL / local remote / current
+ * branch PR. `-R [HOST/]OWNER/REPO` (gh >= 2.x) and `gh api --hostname`
+ * carry the host; GHES works through the same path. When the host cannot be
+ * determined, the helper fails closed — it never silently falls back to
+ * another host.
  *
- * All gh queries are bound to an explicit target repository (`-R
- * <owner/repo>`): a PR URL may point at a different repository than the
- * local checkout, and Actions run/job APIs must never implicitly use the
- * cwd repository.
+ * Actions detection is strict: canonical `/actions/runs/<id>` path AND a
+ * details-URL host that matches the target host. A matching path on a
+ * different host (e.g. `https://ci.example.com/actions/runs/123`) is
+ * external and never log-diagnosed.
  *
  * This script extracts facts only. It never infers a root cause; the agent
- * decides that from the evidence. It never writes to GitHub. All output is
- * passed through conservative credential redaction.
+ * decides that from the evidence. It never writes to GitHub. All dynamic
+ * text reaching stdout/stderr is redacted at the output/error boundary.
  *
  * Usage:
  *   node inspect-pr-checks.mjs [--repo <path>] [--pr <number|url>]
@@ -27,9 +30,6 @@
  *
  * Exit codes: 0 = no failing checks, 1 = failures remain (automation),
  * 2 = usage/blocked (no git root, gh missing/unauthenticated, ...).
- *
- * stdout: stable JSON when --json, human-readable otherwise.
- * stderr: diagnostics only. Credentials never appear in output.
  */
 
 import { spawnSync } from 'node:child_process'
@@ -65,7 +65,7 @@ export function parseArgs(argv) {
     else if (flag === '--json') args.json = true
     else if (flag === '--help' || flag === '-h') { printUsage(); process.exit(0) }
     else {
-      process.stderr.write(`inspect-pr-checks: unknown argument ${JSON.stringify(flag)}\n`)
+      process.stderr.write(`inspect-pr-checks: unknown argument ${redact(JSON.stringify(flag))}\n`)
       printUsage()
       process.exit(2)
     }
@@ -76,7 +76,7 @@ export function parseArgs(argv) {
 function positiveInt(value, flag) {
   const parsed = Number(value)
   if (!Number.isInteger(parsed) || parsed < 1) {
-    process.stderr.write(`inspect-pr-checks: ${flag} requires a positive integer, got ${JSON.stringify(value)}\n`)
+    process.stderr.write(`inspect-pr-checks: ${flag} requires a positive integer, got ${redact(JSON.stringify(value))}\n`)
     process.exit(2)
   }
   return parsed
@@ -90,7 +90,10 @@ export function printUsage() {
   )
 }
 
-/** Run a command with argv only; stdout/stderr are redacted before use. */
+/**
+ * Run a command with argv only. Internal state stays RAW: redaction happens
+ * only at the output/error boundary so logic never sees rewritten values.
+ */
 function run(argv, options = {}) {
   const result = spawnSync(argv[0], argv.slice(1), {
     encoding: 'utf8',
@@ -101,8 +104,8 @@ function run(argv, options = {}) {
   if (result.error !== undefined) throw new Error(`failed to run ${argv[0]}: ${result.error.message}`)
   return {
     status: result.status,
-    stdout: redact(result.stdout ?? ''),
-    stderr: redact(result.stderr ?? ''),
+    stdout: result.stdout ?? '',
+    stderr: result.stderr ?? '',
   }
 }
 
@@ -130,59 +133,85 @@ export function ensureGitRoot(repoPath) {
   throw new Error('not inside a git repository')
 }
 
-function ensureGhAvailable(ghBin, cwd) {
-  const result = run([ghBin, 'auth', 'status'], { cwd })
+/** Fail closed unless the exact target host has an authenticated gh session. */
+function ensureHostAuthenticated(ghBin, host, cwd) {
+  const result = run([ghBin, 'auth', 'status', '--hostname', host], { cwd })
   if (result.status === 0) return
-  throw new Error((result.stderr || result.stdout || '').trim() || 'gh not authenticated; run `gh auth login`')
+  throw new Error((result.stderr || result.stdout || '').trim()
+    || `gh is not authenticated for ${host}; run \`gh auth login --hostname ${host}\``)
 }
 
-/** Extract {owner, repo, number} from a GitHub PR URL, or undefined. */
+/** Extract {host, owner, repo, number} from a GitHub PR URL, or undefined. */
 export function parsePrUrl(url) {
   if (typeof url !== 'string') return undefined
-  const match = /^https?:\/\/(?:[^/]+)\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)\/?$/.exec(url.trim())
-  if (match === null) return undefined
-  return { owner: match[1], repo: match[2], number: Number(match[3]) }
-}
-
-/** Best-effort owner/repo from a git remote URL (github.com / GHES / ssh). */
-export function parseGitRemoteSlug(url) {
-  if (typeof url !== 'string' || url === '') return undefined
-  // https://host/owner/repo(.git) | git@host:owner/repo(.git) | ssh://git@host/owner/repo(.git)
-  const match = /(?:[:/])([^/\s:]+)\/([^/\s]+?)(?:\.git)?$/.exec(url.trim())
-  if (match === null) return undefined
-  return `${match[1]}/${match[2]}`
-}
-
-/** Resolve the local checkout's repository slug via gh, then git remote. */
-function resolveLocalRepoSlug(ghBin, cwd) {
+  let parsed
   try {
-    const data = runJson([ghBin, 'repo', 'view', '--json', 'nameWithOwner'], { cwd })
-    const slug = data?.nameWithOwner
-    if (typeof slug === 'string' && slug !== '') return slug
+    parsed = new URL(url.trim())
   } catch {
-    // fall through to the git remote
+    return undefined
   }
-  const url = run(['git', 'remote', 'get-url', 'origin'], { cwd }).stdout.trim()
-  const slug = parseGitRemoteSlug(url)
-  if (slug !== undefined) return slug
-  throw new Error('cannot resolve the repository: pass a full PR URL, or run inside a repo with an origin remote')
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return undefined
+  const match = /^\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)\/?$/.exec(parsed.pathname)
+  if (match === null) return undefined
+  return { host: parsed.host.toLowerCase(), owner: match[1], repo: match[2], number: Number(match[3]) }
 }
 
 /**
- * Resolve {prValue, repoSlug} for the target PR.
- * - PR URL: the URL's owner/repo is the target (may differ from the checkout).
- * - numeric PR: bound to the LOCAL repository.
- * - no --pr: current-branch PR; the canonical PR URL gives the target repo
- *   (cross-repo aware, correct for fork PRs).
+ * Best-effort {host, owner, repo} from a git remote URL.
+ * https://host/owner/repo(.git) | git@host:owner/repo(.git) |
+ * ssh://git@host/owner/repo(.git).
+ */
+export function parseGitRemote(url) {
+  if (typeof url !== 'string' || url === '') return undefined
+  const https = /^https?:\/\/([^/]+)\/([^/\s]+)\/([^/\s]+?)(?:\.git)?$/.exec(url.trim())
+  if (https !== null) {
+    return { host: https[1].toLowerCase(), owner: https[2], repo: https[3] }
+  }
+  const scp = /^(?:[^@]+@)?([^:/]+):([^/\s]+)\/([^/\s]+?)(?:\.git)?$/.exec(url.trim())
+  if (scp !== null) {
+    return { host: scp[1].toLowerCase(), owner: scp[2], repo: scp[3] }
+  }
+  const ssh = /^ssh:\/\/(?:[^@]+@)?([^/]+)\/([^/\s]+)\/([^/\s]+?)(?:\.git)?$/.exec(url.trim())
+  if (ssh !== null) {
+    return { host: ssh[1].toLowerCase(), owner: ssh[2], repo: ssh[3] }
+  }
+  return undefined
+}
+
+/** Resolve the local checkout's {host, owner, repo} from its origin remote. */
+function resolveLocalTarget(cwd) {
+  const url = run(['git', 'remote', 'get-url', 'origin'], { cwd }).stdout.trim()
+  const parsed = parseGitRemote(url)
+  if (parsed === undefined) {
+    throw new Error('cannot resolve the repository host: origin remote has no GitHub/GHES URL')
+  }
+  return parsed
+}
+
+function targetOf(parts) {
+  return {
+    host: parts.host,
+    owner: parts.owner,
+    repo: parts.repo,
+    repoSelector: `${parts.host}/${parts.owner}/${parts.repo}`,
+  }
+}
+
+/**
+ * Resolve the explicit target {host, owner, repo, repoSelector, prValue}.
+ * - PR URL: the URL's host+repo is the target (may differ from the checkout).
+ * - numeric PR: bound to the LOCAL repository's origin remote host.
+ * - no --pr: current-branch PR via its canonical URL (cross-repo aware).
+ * Unknown host → fail closed, never a silent fallback.
  */
 export function resolveTarget(prArg, ghBin, cwd) {
   if (prArg !== undefined && prArg !== '') {
     const parsed = parsePrUrl(prArg)
     if (parsed !== undefined) {
-      return { prValue: prArg, repoSlug: `${parsed.owner}/${parsed.repo}` }
+      return { prValue: prArg, ...targetOf(parsed) }
     }
     if (/^\d+$/.test(prArg.trim())) {
-      return { prValue: prArg.trim(), repoSlug: resolveLocalRepoSlug(ghBin, cwd) }
+      return { prValue: prArg.trim(), ...targetOf(resolveLocalTarget(cwd)) }
     }
     throw new Error(`cannot parse --pr ${JSON.stringify(prArg)}: expected a PR number or GitHub PR URL`)
   }
@@ -191,9 +220,9 @@ export function resolveTarget(prArg, ghBin, cwd) {
   if (!Number.isInteger(number)) throw new Error('no PR associated with the current branch')
   const fromUrl = typeof data?.url === 'string' ? parsePrUrl(data.url) : undefined
   if (fromUrl !== undefined && fromUrl.number === number) {
-    return { prValue: String(number), repoSlug: `${fromUrl.owner}/${fromUrl.repo}` }
+    return { prValue: String(number), ...targetOf(fromUrl) }
   }
-  return { prValue: String(number), repoSlug: resolveLocalRepoSlug(ghBin, cwd) }
+  throw new Error('cannot resolve the PR host: gh pr view returned no canonical PR URL for the current branch')
 }
 
 function parseAvailableFields(message) {
@@ -213,15 +242,15 @@ function parseAvailableFields(message) {
 const CHECK_FIELDS = ['name', 'state', 'conclusion', 'detailsUrl', 'startedAt', 'completedAt']
 const CHECK_FALLBACK_FIELDS = ['name', 'state', 'bucket', 'link', 'startedAt', 'completedAt', 'workflow']
 
-export function fetchChecks(prValue, repoSlug, ghBin, cwd) {
-  let result = run([ghBin, 'pr', 'checks', prValue, '-R', repoSlug, '--json', CHECK_FIELDS.join(',')], { cwd })
+export function fetchChecks(prValue, repoSelector, ghBin, cwd) {
+  let result = run([ghBin, 'pr', 'checks', prValue, '-R', repoSelector, '--json', CHECK_FIELDS.join(',')], { cwd })
   if (result.status !== 0) {
     const message = [result.stderr, result.stdout].filter(Boolean).join('\n').trim()
     const available = parseAvailableFields(message)
     if (available.length === 0) throw new Error(message || 'gh pr checks failed')
     const selected = CHECK_FALLBACK_FIELDS.filter((field) => available.includes(field))
     if (selected.length === 0) throw new Error('no usable fields available for gh pr checks')
-    result = run([ghBin, 'pr', 'checks', prValue, '-R', repoSlug, '--json', selected.join(',')], { cwd })
+    result = run([ghBin, 'pr', 'checks', prValue, '-R', repoSelector, '--json', selected.join(',')], { cwd })
     if (result.status !== 0) {
       throw new Error((result.stderr || result.stdout || '').trim() || 'gh pr checks failed')
     }
@@ -250,27 +279,40 @@ function normalize(value) {
 }
 
 /**
- * GitHub Actions detection is strict: only the canonical Actions path
- * `/actions/runs/<id>` counts (github.com and GHES both use it). A generic
- * `/runs/<id>` (CircleCI pipelines, self-hosted CI) is NOT Actions.
+ * GitHub Actions detection is strict: canonical `/actions/runs/<id>` path
+ * (with owner/repo segments) AND a details-URL host that matches the target
+ * host. A matching path on any other host (or a generic `/runs/<id>`) is
+ * NOT Actions.
  */
-export function extractRunId(url) {
-  if (typeof url !== 'string' || url === '') return undefined
+function isActionsUrl(url, targetHost) {
+  if (typeof url !== 'string' || url === '') return false
+  let parsed
+  try {
+    parsed = new URL(url)
+  } catch {
+    return false
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false
+  if (parsed.host.toLowerCase() !== targetHost) return false
+  return /^\/[^/\s]+\/[^/\s]+\/actions\/runs\/\d+/.test(parsed.pathname)
+}
+
+export function extractRunId(url, targetHost) {
+  if (!isActionsUrl(url, targetHost)) return undefined
   const match = /\/actions\/runs\/(\d+)/.exec(url)
   return match === null ? undefined : match[1]
 }
 
-/** Job ids are only meaningful inside a canonical Actions run URL. */
-export function extractJobId(url) {
-  if (typeof url !== 'string' || url === '') return undefined
+export function extractJobId(url, targetHost) {
+  if (!isActionsUrl(url, targetHost)) return undefined
   const match = /\/actions\/runs\/\d+\/job\/(\d+)/.exec(url)
   return match === null ? undefined : match[1]
 }
 
-function fetchRunMetadata(runId, repoSlug, ghBin, cwd) {
+function fetchRunMetadata(runId, repoSelector, ghBin, cwd) {
   const fields = ['conclusion', 'status', 'workflowName', 'name', 'event', 'headBranch', 'headSha', 'url']
   try {
-    return runJson([ghBin, 'run', 'view', runId, '-R', repoSlug, '--json', fields.join(',')], { cwd })
+    return runJson([ghBin, 'run', 'view', runId, '-R', repoSelector, '--json', fields.join(',')], { cwd })
   } catch {
     return undefined
   }
@@ -286,19 +328,20 @@ function isZipPayload(buffer) {
 }
 
 /**
- * Fetch run log bound to the target repo; on pending, fall back to the job
- * log. Returns {text, error, status}. All text is redacted.
+ * Fetch run log bound to the target repo/host; on pending, fall back to the
+ * job log. Returns {text, error, status} with RAW content (redacted at the
+ * output boundary).
  */
-export function fetchCheckLog(runId, jobId, repoSlug, ghBin, cwd) {
-  const runLog = run([ghBin, 'run', 'view', runId, '-R', repoSlug, '--log'], { cwd })
+export function fetchCheckLog(runId, jobId, target, ghBin, cwd) {
+  const runLog = run([ghBin, 'run', 'view', runId, '-R', target.repoSelector, '--log'], { cwd })
   if (runLog.status === 0) {
     return { text: runLog.stdout, error: undefined, status: 'ok' }
   }
   const runError = (runLog.stderr || runLog.stdout || '').trim() || 'gh run view failed'
 
   if (isPendingMessage(runError) && jobId !== undefined) {
-    const endpoint = `/repos/${repoSlug}/actions/jobs/${jobId}/logs`
-    const job = spawnSync(ghBin, ['api', endpoint], {
+    const endpoint = `/repos/${target.owner}/${target.repo}/actions/jobs/${jobId}/logs`
+    const job = spawnSync(ghBin, ['api', '--hostname', target.host, endpoint], {
       encoding: 'buffer',
       cwd,
       timeout: 120_000,
@@ -308,9 +351,9 @@ export function fetchCheckLog(runId, jobId, repoSlug, ghBin, cwd) {
       if (isZipPayload(job.stdout)) {
         return { text: '', error: 'job logs returned a zip archive; unable to parse', status: 'error' }
       }
-      return { text: redact(job.stdout.toString('utf8')), error: undefined, status: 'ok' }
+      return { text: job.stdout.toString('utf8'), error: undefined, status: 'ok' }
     }
-    const jobError = redact((job.stderr?.toString('utf8') || job.stdout?.toString('utf8') || '').trim())
+    const jobError = (job.stderr?.toString('utf8') || job.stdout?.toString('utf8') || '').trim()
     if (isPendingMessage(jobError)) return { text: '', error: jobError || runError, status: 'pending' }
     if (jobError !== '') return { text: '', error: jobError, status: 'error' }
     return { text: '', error: runError, status: 'pending' }
@@ -345,10 +388,10 @@ export function tailLines(text, maxLines) {
   return text.split('\n').slice(-maxLines).join('\n')
 }
 
-export function analyzeCheck(check, { ghBin, cwd, repoSlug, maxLines, context }) {
+export function analyzeCheck(check, { ghBin, cwd, target, maxLines, context }) {
   const url = check.detailsUrl ?? check.link ?? ''
-  const runId = extractRunId(url)
-  const jobId = extractJobId(url)
+  const runId = extractRunId(url, target.host)
+  const jobId = extractJobId(url, target.host)
   const base = {
     name: check.name ?? '',
     provider: runId === undefined ? 'external' : 'github-actions',
@@ -359,8 +402,8 @@ export function analyzeCheck(check, { ghBin, cwd, repoSlug, maxLines, context })
   if (runId === undefined) {
     return { ...base, status: 'external', note: 'No GitHub Actions run id detected in detailsUrl.', run: null, logSnippet: '', logTail: '', error: null }
   }
-  const metadata = fetchRunMetadata(runId, repoSlug, ghBin, cwd)
-  const log = fetchCheckLog(runId, jobId, repoSlug, ghBin, cwd)
+  const metadata = fetchRunMetadata(runId, target.repoSelector, ghBin, cwd)
+  const log = fetchCheckLog(runId, jobId, target, ghBin, cwd)
   if (log.status === 'pending') {
     return { ...base, status: 'log_pending', note: log.error || 'Logs are not available yet.', run: metadata ?? null, logSnippet: '', logTail: '', error: null }
   }
@@ -379,7 +422,7 @@ export function analyzeCheck(check, { ghBin, cwd, repoSlug, maxLines, context })
 }
 
 function renderText(target, results) {
-  const lines = [`PR ${target.prValue} (${target.repoSlug}): ${results.length} failing check(s) analyzed.`]
+  const lines = [`PR ${target.prValue} (${target.repoSelector}): ${results.length} failing check(s) analyzed.`]
   for (const result of results) {
     lines.push(''.padEnd(60, '-'))
     lines.push(`Check: ${result.name}`)
@@ -418,23 +461,29 @@ export function main(argv) {
   let root
   try {
     root = ensureGitRoot(args.repo)
-    ensureGhAvailable(args.ghBin, root)
     const target = resolveTarget(args.pr, args.ghBin, root)
-    const checks = fetchChecks(target.prValue, target.repoSlug, args.ghBin, root)
+    ensureHostAuthenticated(args.ghBin, target.host, root)
+    const checks = fetchChecks(target.prValue, target.repoSelector, args.ghBin, root)
     const failing = checks.filter((check) => isFailing(check))
     const results = failing.map((check) => analyzeCheck(check, {
-      ghBin: args.ghBin, cwd: root, repoSlug: target.repoSlug,
+      ghBin: args.ghBin, cwd: root, target,
       maxLines: args.maxLines, context: args.context,
     }))
-    const output = { schemaVersion: 1, pr: target.prValue, repoSlug: target.repoSlug, failingChecks: results }
+    const output = {
+      schemaVersion: 1,
+      pr: target.prValue,
+      repoSlug: `${target.owner}/${target.repo}`,
+      host: target.host,
+      failingChecks: results,
+    }
     if (args.json) {
-      process.stdout.write(`${JSON.stringify(output, null, 2)}\n`)
+      process.stdout.write(`${redact(JSON.stringify(output, null, 2))}\n`)
     } else {
-      process.stdout.write(`${renderText(target, results)}\n`)
+      process.stdout.write(`${redact(renderText(target, results))}\n`)
     }
     process.exitCode = failing.length > 0 ? 1 : 0
   } catch (error) {
-    process.stderr.write(`inspect-pr-checks: ${error instanceof Error ? error.message : String(error)}\n`)
+    process.stderr.write(`inspect-pr-checks: ${redact(error instanceof Error ? error.message : String(error))}\n`)
     process.exitCode = 2
   }
 }

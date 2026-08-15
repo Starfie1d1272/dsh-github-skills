@@ -69,7 +69,8 @@ function respondRequired(key, value) {
   if (value === undefined) respond({ status: 1, stderr: 'fake gh: no ' + key + ' scenario\\n' })
   return value
 }
-// Protocol helpers: read a -F key=value pair and the -R repo binding.
+// Protocol helpers: read a -F key=value pair, the -R repo binding, and the
+// --hostname binding.
 function flagValue(flag, prefix) {
   for (let i = 0; i < args.length - 1; i += 1) {
     if (args[i] === flag && (prefix === undefined || args[i + 1].startsWith(prefix))) return args[i + 1]
@@ -82,26 +83,55 @@ function repoBinding() {
   }
   return undefined
 }
+function hostnameBinding() {
+  for (let i = 0; i < args.length - 1; i += 1) {
+    if (args[i] === '--hostname') return args[i + 1]
+  }
+  return undefined
+}
+function failMismatch(kind, expected, actual) {
+  respond({ status: 1, stderr: 'fake gh: ' + kind + ' mismatch: expected ' + expected + ', got ' + (actual === undefined ? '(none)' : actual) + '\\n' })
+}
+function assertHost() {
+  // Host binding may ride --hostname (auth/api/graphql) or the -R
+  // [HOST/]OWNER/REPO selector (pr checks, run view). Either must match.
+  const expected = SCENARIO.expectedHost
+  if (expected === undefined) return
+  const viaFlag = hostnameBinding()
+  const viaRepo = repoBinding()
+  const ok = viaFlag === expected || (viaRepo !== undefined && viaRepo.startsWith(expected + '/'))
+  if (!ok) failMismatch('hostname', expected, viaFlag ?? viaRepo)
+}
 function assertRepo() {
+  // expectedRepo is the full -R selector (e.g. github.com/acme/demo).
   const expected = SCENARIO.expectedRepo
   if (expected === undefined) return
   const actual = repoBinding()
-  if (actual !== expected) {
-    respond({ status: 1, stderr: 'fake gh: repo context mismatch: expected ' + expected + ', got ' + (actual === undefined ? '(none)' : actual) + '\\n' })
-  }
+  if (actual !== expected) failMismatch('repo context', expected, actual)
+}
+function expectedSlug() {
+  // owner/repo portion of the -R selector for job-log endpoint checks.
+  const selector = SCENARIO.expectedRepo
+  if (selector === undefined) return undefined
+  const parts = selector.split('/')
+  return parts.length >= 2 ? parts.slice(1).join('/') : selector
 }
 const sub = args[0]
 if (sub === 'auth') {
+  assertHost()
   respond(pick('auth') ?? { status: 0 })
 } else if (sub === 'pr' && args[1] === 'view') {
+  assertHost()
   respond(respondRequired('prView', pick('prView')))
 } else if (sub === 'pr' && args[1] === 'checks') {
+  assertHost()
   assertRepo()
   respond(respondRequired('checks', pick('checks')))
 } else if (sub === 'api' && args[1] === 'graphql') {
   // Protocol-aware graphql: scenario.graphql maps each collection to pages
   // keyed by the cursor actually passed in argv. An unexpected cursor or
   // collection fails loudly instead of returning a canned page.
+  assertHost()
   const coll = stdin.includes('reviewThreads(first') ? 'threads'
     : stdin.includes('reviews(first') ? 'reviews'
       : stdin.includes('comments(first') ? 'comments' : undefined
@@ -130,19 +160,25 @@ if (sub === 'auth') {
   pr[field] = page.page
   respond({ status: 0, stdout: JSON.stringify({ data: { repository: { pullRequest: pr } } }) })
 } else if (sub === 'api') {
-  const endpoint = args[1] ?? ''
+  // Endpoint is the first positional path argument (flags like --hostname
+  // may precede it).
+  const endpoint = args.find((a) => a.startsWith('/')) ?? ''
   if (endpoint.startsWith('/repos/') && endpoint.endsWith('/logs')) {
-    // Job-log endpoint embeds the repo slug; verify it matches expectedRepo.
-    if (SCENARIO.expectedRepo !== undefined && !endpoint.startsWith('/repos/' + SCENARIO.expectedRepo + '/actions/jobs/')) {
+    // Job-log endpoint embeds the owner/repo slug (host rides --hostname).
+    assertHost()
+    const slug = expectedSlug()
+    if (slug !== undefined && !endpoint.startsWith('/repos/' + slug + '/actions/jobs/')) {
       respond({ status: 1, stderr: 'fake gh: job log endpoint repo mismatch: ' + endpoint + '\\n' })
     }
     respond(respondRequired('jobLog', pick('jobLog')))
   }
   respond({ status: 1, stderr: 'fake gh: no scenario for api ' + endpoint + '\\n' })
 } else if (sub === 'run' && args[1] === 'view' && args.includes('--log')) {
+  assertHost()
   assertRepo()
   respond(respondRequired('runLog', pick('runLog')))
 } else if (sub === 'run' && args[1] === 'view' && args.includes('--json')) {
+  assertHost()
   assertRepo()
   respond(respondRequired('runView', pick('runView')))
 } else if (sub === 'repo' && args[1] === 'view') {

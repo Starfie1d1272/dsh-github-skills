@@ -17,9 +17,10 @@
  * and the result must not be claimed complete for that thread.
  *
  * This is a read-only workflow helper. It never writes to GitHub, never
- * outputs credentials, and never touches `gh auth token`. All output passes
- * through conservative credential redaction (untrusted comment bodies may
- * contain pasted tokens).
+ * outputs credentials, and never touches `gh auth token`. All dynamic text
+ * reaching stdout/stderr passes through conservative credential redaction
+ * at the output/error boundary (untrusted comment bodies may contain pasted
+ * tokens).
  *
  * Usage:
  *   node fetch-review-threads.mjs [--repo owner/name] [--pr <number|url>]
@@ -95,7 +96,7 @@ export function parseArgs(argv) {
     else if (flag === '--gh-bin' && value !== undefined) { args.ghBin = value; index += 1 }
     else if (flag === '--help' || flag === '-h') { printUsage(); process.exit(0) }
     else {
-      process.stderr.write(`fetch-review-threads: unknown argument ${JSON.stringify(flag)}\n`)
+      process.stderr.write(`fetch-review-threads: unknown argument ${redact(JSON.stringify(flag))}\n`)
       printUsage()
       process.exit(2)
     }
@@ -119,18 +120,28 @@ export function parseRepoSpec(spec) {
   return { owner: match[1], repo: match[2] }
 }
 
-/** Extract {owner, repo, number} from a GitHub PR URL, or undefined. */
+/** Extract {host, owner, repo, number} from a GitHub PR URL, or undefined. */
 export function parsePrUrl(url) {
   if (typeof url !== 'string') return undefined
-  const match = /^https?:\/\/(?:[^/]+)\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)\/?$/.exec(url.trim())
+  let parsed
+  try {
+    parsed = new URL(url.trim())
+  } catch {
+    return undefined
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return undefined
+  const match = /^\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)\/?$/.exec(parsed.pathname)
   if (match === null) return undefined
-  return { owner: match[1], repo: match[2], number: Number(match[3]) }
+  // parsed.host keeps the port (ghes.example:8443); hostnames are
+  // case-insensitive, so normalize to lowercase.
+  return { host: parsed.host.toLowerCase(), owner: match[1], repo: match[2], number: Number(match[3]) }
 }
 
 /**
  * Run a command with argv only (no shell interpolation) and capture output.
- * stdout/stderr are redacted so diagnostics and data never carry raw
- * credential-shaped material.
+ * Internal state stays RAW: redaction happens only at the output/error
+ * boundary so logic (JSON parsing, marker detection) never sees rewritten
+ * values.
  */
 function run(argv, options = {}) {
   const result = spawnSync(argv[0], argv.slice(1), {
@@ -142,8 +153,8 @@ function run(argv, options = {}) {
   if (result.error !== undefined) throw new Error(`failed to run ${argv[0]}: ${result.error.message}`)
   return {
     status: result.status,
-    stdout: redact(result.stdout ?? ''),
-    stderr: redact(result.stderr ?? ''),
+    stdout: result.stdout ?? '',
+    stderr: result.stderr ?? '',
   }
 }
 
@@ -160,49 +171,49 @@ function runJson(argv, options = {}) {
   }
 }
 
-function ensureAuthenticated(ghBin) {
-  const result = run([ghBin, 'auth', 'status'])
+/** Fail closed unless the exact target host has an authenticated gh session. */
+function ensureAuthenticated(ghBin, host) {
+  const result = run([ghBin, 'auth', 'status', '--hostname', host])
   if (result.status === 0) return
   const message = (result.stderr || result.stdout || '').trim()
-  throw new Error(message || 'gh auth status failed; run `gh auth login` to authenticate the GitHub CLI')
+  throw new Error(message || `gh is not authenticated for ${host}; run \`gh auth login --hostname ${host}\``)
 }
 
 /**
- * Resolve {owner, repo, number} for the current branch PR (cross-repo aware).
+ * Resolve {host, owner, repo, number} for the current branch PR.
  *
- * A pull request object — including its reviewThreads — belongs to its
- * TARGET repository. `gh pr view` exposes the HEAD repository, which for a
- * fork PR is the fork; querying review threads through the head repo would
- * return the wrong pullRequest (or none). The canonical PR URL always points
- * at the target repository, so it is preferred; the head repo is used only
- * as a same-repository fallback when the URL is unavailable.
+ * The canonical PR URL carries the host and the TARGET repository (a fork PR
+ * belongs to its target repo, not the fork head). Without a canonical URL
+ * the host cannot be determined — fail closed instead of guessing.
  */
 export function resolveCurrentBranchPr(ghBin) {
-  const data = runJson([ghBin, 'pr', 'view', '--json', 'number,url,headRepositoryOwner,headRepository'])
+  const data = runJson([ghBin, 'pr', 'view', '--json', 'number,url'])
   const number = data?.number
   if (!Number.isInteger(number)) {
     throw new Error('no PR associated with the current branch (gh pr view returned no PR number)')
   }
   const fromUrl = typeof data?.url === 'string' ? parsePrUrl(data.url) : undefined
-  if (fromUrl !== undefined && fromUrl.number === number) {
-    return { owner: fromUrl.owner, repo: fromUrl.repo, number }
+  if (fromUrl === undefined || fromUrl.number !== number) {
+    throw new Error('cannot resolve the PR host: gh pr view returned no canonical PR URL for the current branch')
   }
-  const owner = data?.headRepositoryOwner?.login
-  const repo = data?.headRepository?.name
-  if (typeof owner !== 'string' || typeof repo !== 'string') {
-    throw new Error('no PR associated with the current branch (gh pr view returned no target/head repo)')
-  }
-  return { owner, repo, number }
+  return fromUrl
 }
 
-/** Resolve {owner, repo, number} from explicit repo/pr arguments. */
+/**
+ * Resolve {host, owner, repo, number} from explicit repo/pr arguments.
+ * An explicit `--repo owner/name` without a host binds to the gh default
+ * host (github.com) — the caller controls this form; anything ambiguous
+ * fails closed.
+ */
 export function resolveTarget(args, ghBin) {
+  let host
   let owner
   let repo
   let number
   if (args.pr !== undefined && args.pr !== '') {
     const asUrl = parsePrUrl(args.pr)
     if (asUrl !== undefined) {
+      host = asUrl.host
       owner = asUrl.owner
       repo = asUrl.repo
       number = asUrl.number
@@ -223,6 +234,7 @@ export function resolveTarget(args, ghBin) {
       throw new Error('--pr is required when --repo is given (no PR number/URL to resolve)')
     }
     const current = resolveCurrentBranchPr(ghBin)
+    host = current.host
     owner = current.owner
     repo = current.repo
     number = current.number
@@ -230,12 +242,18 @@ export function resolveTarget(args, ghBin) {
   if (owner === undefined || repo === undefined) {
     throw new Error('cannot resolve the repository: pass --repo owner/name or a full PR URL')
   }
-  return { owner, repo, number }
+  if (host === undefined) {
+    // An explicit --repo form carries no host; github.com is the gh default,
+    // never a silent switch away from an already-resolved host.
+    host = 'github.com'
+  }
+  return { host, owner, repo, number }
 }
 
-function graphqlQuery(ghBin, { owner, repo, number }, query, cursor) {
+function graphqlQuery(ghBin, { host, owner, repo, number }, query, cursor) {
   const argv = [
     ghBin, 'api', 'graphql',
+    '--hostname', host,
     '-F', 'query=@-',
     '-F', `owner=${owner}`,
     '-F', `repo=${repo}`,
@@ -326,15 +344,16 @@ export function main(argv) {
   const args = parseArgs(argv)
   let result
   try {
-    ensureAuthenticated(args.ghBin)
     const target = resolveTarget(args, args.ghBin)
+    ensureAuthenticated(args.ghBin, target.host)
     result = fetchAll(args.ghBin, target)
   } catch (error) {
-    process.stderr.write(`fetch-review-threads: ${error instanceof Error ? error.message : String(error)}\n`)
+    // Output boundary: sanitize every dynamic piece of the diagnostic.
+    process.stderr.write(`fetch-review-threads: ${redact(error instanceof Error ? error.message : String(error))}\n`)
     process.exitCode = 1
     return
   }
-  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`)
+  process.stdout.write(`${redact(JSON.stringify(result, null, 2))}\n`)
 }
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {

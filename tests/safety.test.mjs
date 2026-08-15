@@ -56,7 +56,7 @@ test('inspect-pr-checks performs no remote writes (invocation log audit)', () =>
     repo.run(['commit', '-m', 'init'])
     repo.run(['remote', 'add', 'origin', 'https://github.com/acme/demo.git'])
     const { script: gh } = createFakeGh(tmp.dir, {
-      expectedRepo: 'acme/demo',
+      expectedRepo: 'github.com/acme/demo',
       repoView: { status: 0, stdout: JSON.stringify({ nameWithOwner: 'acme/demo' }) },
       checks: { status: 0, stdout: JSON.stringify([{ name: 'x', state: 'FAILURE', conclusion: 'failure', detailsUrl: 'https://github.com/acme/demo/actions/runs/1' }]) },
       runView: { status: 0, stdout: JSON.stringify({ conclusion: 'failure' }) },
@@ -224,7 +224,7 @@ test('external CI is never log-diagnosed (no run/log surfaces called)', () => {
     repo.run(['remote', 'add', 'origin', 'https://github.com/acme/demo.git'])
     // No runView/runLog/repoView/jobLog scenarios: any such call fails loudly.
     const { script: gh } = createFakeGh(tmp.dir, {
-      expectedRepo: 'acme/demo',
+      expectedRepo: 'github.com/acme/demo',
       checks: { status: 0, stdout: JSON.stringify([{ name: 'circleci', state: 'FAILURE', detailsUrl: 'https://app.circleci.com/pipelines/acme/1' }]) },
     })
     const result = runScript(SCRIPTS.inspectPrChecks, ['--repo', repo.dir, '--pr', '1', '--json', '--gh-bin', gh])

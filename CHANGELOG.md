@@ -124,3 +124,28 @@ Tests & infrastructure:
   deliberately excluded because it needs a live DSH install), and truthful
   README install sections (npm path marked "available after npm release";
   local tarball path is the currently available one).
+
+### Fixed (final release review — host context & error boundary)
+
+- **Host-aware target (high):** every helper now resolves and binds ONE
+  explicit `{host, owner, repo}` target. `parsePrUrl` keeps the hostname;
+  GraphQL uses `gh api graphql --hostname <host>`, checks/run use
+  `-R [HOST/]OWNER/REPO` (gh 2.97 syntax), and the job-log API uses
+  `gh api --hostname <host> /repos/...`. GHES is fully supported through the
+  same path, with `gh auth status --hostname <host>` as the preflight;
+  an unresolvable host (e.g. current-branch PR without a canonical URL)
+  fails closed instead of silently falling back to another host.
+- **Actions provider = path AND host (medium):** canonical
+  `/actions/runs/<id>` is necessary but no longer sufficient: the
+  details-URL host must equal the target host. `https://ci.example.com/
+  actions/runs/123`, `https://evil.example/actions/runs/123`, and a
+  github.com URL under a GHES target are all external and never touch
+  `gh run`/job-log APIs.
+- **Error-boundary redaction (medium):** helper internals stay raw;
+  redaction moved to the output/error boundary — every `process.stdout` /
+  `process.stderr` write and every diagnostic path sanitizes dynamic text.
+  Invalid `--pr`, unknown flags, repo paths, and `--gh-bin` paths carrying
+  token-like material can no longer surface raw secrets.
+- README safety wording now matches `references/safety-model.md` (never
+  actively extracts; redacts known shapes; untrusted content treated as
+  untrusted) instead of over-claiming.

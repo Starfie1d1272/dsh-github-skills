@@ -124,23 +124,77 @@ test('fork PR: current-branch resolution targets the PR repository, not the fork
     assert.ok(graphqlCall !== undefined, 'graphql call must exist')
     assert.ok(graphqlCall.includes('owner=acme') && graphqlCall.includes('repo=demo'), 'graphql must target acme/demo')
     assert.ok(!graphqlCall.includes('owner=alice'), 'graphql must not target the fork head repo')
+    assert.ok(graphqlCall.includes('--hostname') && graphqlCall.includes('github.com'), 'graphql must bind the github.com host')
   } finally {
     tmp.clean()
   }
 })
 
-test('current-branch resolution falls back to the head repo when no URL is available', () => {
-  const tmp = tempDir('frt-current-fallback')
+test('current-branch PR without a canonical URL fails closed (host unknown)', () => {
+  const tmp = tempDir('frt-no-url')
   try {
     const gh = createFakeGh(tmp.dir, {
-      prView: { status: 0, stdout: JSON.stringify({ number: 7, headRepositoryOwner: { login: 'acme' }, headRepository: { name: 'demo' } }) },
-      graphql: scenario(),
+      prView: { status: 0, stdout: JSON.stringify({ number: 7 }) },
     })
     const result = runScript(SCRIPTS.fetchReviewThreads, ['--gh-bin', gh.script])
+    assert.equal(result.status, 1)
+    assert.match(result.stderr, /cannot resolve the PR host/)
+  } finally {
+    tmp.clean()
+  }
+})
+
+test('GHES PR URL keeps the host on auth and every GraphQL call', () => {
+  const tmp = tempDir('frt-ghes')
+  try {
+    const gh = createFakeGh(tmp.dir, {
+      expectedHost: 'ghes.example.com',
+      graphql: scenario(),
+    })
+    const result = runScript(SCRIPTS.fetchReviewThreads, ['--pr', 'https://ghes.example.com/acme/demo/pull/42', '--gh-bin', gh.script])
     assert.equal(result.status, 0, result.stderr)
     const out = parseStdoutJson(result)
     assert.equal(out.pullRequest.owner, 'acme')
     assert.equal(out.pullRequest.repo, 'demo')
+    assert.equal(out.pullRequest.number, 42)
+    const log = ghLog(tmp)
+    const authCall = log.find((argv) => argv[0] === 'auth')
+    assert.ok(authCall.includes('--hostname') && authCall.includes('ghes.example.com'), 'auth must check the GHES host')
+    const graphqlCalls = log.filter((argv) => argv[0] === 'api' && argv[1] === 'graphql')
+    assert.ok(graphqlCalls.length >= 3, 'three collections queried')
+    for (const call of graphqlCalls) {
+      assert.ok(call.includes('--hostname') && call.includes('ghes.example.com'), `graphql must bind ghes.example.com: ${call.join(' ')}`)
+      assert.ok(!call.includes('github.com'), 'no call may fall back to github.com')
+    }
+  } finally {
+    tmp.clean()
+  }
+})
+
+test('explicit --repo owner/name binds the gh default host github.com', () => {
+  const tmp = tempDir('frt-repo-default-host')
+  try {
+    const gh = createFakeGh(tmp.dir, {
+      expectedHost: 'github.com',
+      graphql: scenario(),
+    })
+    const result = runScript(SCRIPTS.fetchReviewThreads, ['--repo', 'acme/demo', '--pr', '5', '--gh-bin', gh.script])
+    assert.equal(result.status, 0, result.stderr)
+    const out = parseStdoutJson(result)
+    assert.equal(out.pullRequest.number, 5)
+  } finally {
+    tmp.clean()
+  }
+})
+
+test('boundary redaction: invalid --pr carrying a token never reaches stderr raw', () => {
+  const tmp = tempDir('frt-pr-token')
+  try {
+    const gh = createFakeGh(tmp.dir, {})
+    const result = runScript(SCRIPTS.fetchReviewThreads, ['--pr', 'ghp_ABCDEFGHIJKLMNOPQRST', '--gh-bin', gh.script])
+    assert.equal(result.status, 1)
+    assert.ok(!result.stderr.includes('ghp_ABCDEFGHIJKLMNOPQRST'), 'raw token must not appear in stderr')
+    assert.ok(result.stderr.includes('[REDACTED_GITHUB_TOKEN]'), 'redacted placeholder in the diagnostic')
   } finally {
     tmp.clean()
   }

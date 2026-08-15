@@ -144,7 +144,7 @@ dsh plugin --profile web remove dsh-github-skills
 
 规范性规则见 [references/safety-model.md](references/safety-model.md)。要点：
 
-- 凭据绝不进入 Skill 输出、日志、临时文件、PR body、commit 或错误消息；绝不调用 `gh auth token`。
+- Helpers **从不主动提取** raw 凭据（绝不调用 `gh auth token`），也**不存储凭据**；每条输出路径在进入 model-visible 输出前对已知凭据形态（GitHub token 前缀、https remote URL userinfo）做 redaction 并替换为稳定占位符。不可信的远端内容——评论、CI 日志、gh/git stderr——按不可信对待，对其中凭据形态做 redaction。
 - 分析请求永不自动变成写操作："看看 review"不会 reply/resolve；"为什么 CI 挂了"不会 push 修复。
 - "处理 review"只授权**本地**修改；远程写需要显式意图或宿主 approval gate。
 - 混合工作树绝不用 `git add -A` 暂存；范围歧义会中止发布流。

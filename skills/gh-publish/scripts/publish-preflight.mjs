@@ -38,7 +38,7 @@ export function parseArgs(argv) {
     else if (flag === '--json') args.json = true
     else if (flag === '--help' || flag === '-h') { printUsage(); process.exit(0) }
     else {
-      process.stderr.write(`publish-preflight: unknown argument ${JSON.stringify(flag)}\n`)
+      process.stderr.write(`publish-preflight: unknown argument ${redact(JSON.stringify(flag))}\n`)
       printUsage()
       process.exit(2)
     }
@@ -67,12 +67,13 @@ function git(args, cwd, options = {}) {
     maxBuffer: 16 * 1024 * 1024,
   })
   if (result.error !== undefined) throw new Error(`failed to run git: ${result.error.message}`)
-  // stdout/stderr are redacted: a credential-bearing remote URL (e.g.
-  // https://user:TOKEN@github.com/...) must never reach model-visible output.
+  // Internal state stays RAW; credential redaction happens only at the
+  // output/error boundary (a credential-bearing remote URL such as
+  // https://user:TOKEN@github.com/... is sanitized before stdout).
   return {
     status: result.status,
-    stdout: redact(result.stdout ?? ''),
-    stderr: redact(result.stderr ?? ''),
+    stdout: result.stdout ?? '',
+    stderr: result.stderr ?? '',
   }
 }
 
@@ -216,9 +217,9 @@ export function main(argv) {
   const args = parseArgs(argv)
   try {
     const preflight = collectPreflight(args.repo)
-    process.stdout.write(`${JSON.stringify(preflight, null, 2)}\n`)
+    process.stdout.write(`${redact(JSON.stringify(preflight, null, 2))}\n`)
   } catch (error) {
-    process.stderr.write(`publish-preflight: ${error instanceof Error ? error.message : String(error)}\n`)
+    process.stderr.write(`publish-preflight: ${redact(error instanceof Error ? error.message : String(error))}\n`)
     process.exitCode = 1
   }
 }
