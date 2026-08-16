@@ -1,92 +1,60 @@
 ---
 name: github
-description: Triage and orient GitHub repository, pull request, and issue work using whatever GitHub capabilities are already available in this session. Use for general GitHub help, PR or issue summaries, or repository context before choosing a more specific workflow.
-whenToUse: User asks to look at a PR, an issue, a repository, or "what is happening on GitHub"; or needs general GitHub triage before a specialist review, CI, or publish workflow.
+description: General GitHub triage for repositories, issues, and pull requests: inspect or summarize state and handle scoped metadata actions. Use when no review-feedback, CI, or publish specialist clearly matches.
 ---
 
 # GitHub
 
-## Overview
+General entrypoint for GitHub triage. Resolve context, classify the request,
+and route specialist work early. Do not re-implement specialist workflows
+here.
 
-This is the umbrella entrypoint for GitHub work in this skill pack. Its only
-jobs are to **resolve context**, **classify intent**, and **route
-immediately** to a specialist skill. It does not re-implement the specialist
+## Capability policy
+
+Use the most specific visible capability whose documented semantics cover
+the need. Provider names and tool-name prefixes do not imply capability.
+Use local git for local checkout facts; use `gh` only where no suitable
+structured capability covers the operation. Never assume an unavailable
+capability exists.
+
+## Routing
+
+- general repository / issue / PR triage → stay here
+- review feedback → `gh-address-comments`
+- failing GitHub Actions → `gh-fix-ci`
+- push / publish / open a PR — including fork contributions — with any
+  required branch/commit work → `gh-publish`
+
+When a specialist matches, load it with `skill()` and let it own the
+workflow.
+
+Mixed requests may require multiple specialists. Complete review or CI
+domain work before publishing; `gh-publish` does not replace those
 workflows.
 
-This pack is intentionally hybrid and capability-agnostic:
+## Triage
 
-- Use whatever GitHub capabilities are **already visible in this session's
-  tool catalog** for structured repository / issue / PR data. Detected
-  providers may include `dsh-github-workflow` (`gh_get_repo_context`,
-  `gh_analyze_issue`, `gh_create_draft_pr`, ...), `dsh-github`
-  (`pr_create`, `gh_review`, `issue_comment`, ...), or
-  `dsh-github-connector` (`github_search`, `github_pr_read`, ...).
-- Use local `git` and `gh` only for the gaps those capabilities do not
-  cover: current-branch PR discovery, branch/commit/push, `gh auth status`,
-  review-thread state via GraphQL, and GitHub Actions log inspection.
-- Never pretend a capability exists. Only call a tool whose name is actually
-  in your current catalog. If none matches, fall back to `gh`/`git`.
-- **Tool-name collisions across providers:** the `gh_*` prefix appears in
-  more than one provider (e.g. `dsh-github-workflow` and `dsh-github`), and
-  their tools are not interchangeable. Match on the **exact full tool name
-  plus its parameter signature and description**, and pick the tool whose
-  documented capability matches the current need. A same-prefix name from
-  another provider is not a reason to call it.
-- Keep connector state and the local checkout aligned: if the request is
-  about the current branch, resolve the local repo and branch first.
+1. **Resolve context.** Repo, PR/issue number, or URL given by the user
+   wins; for "this branch" / "the current PR", resolve the local git
+   context first. Ask if still ambiguous.
+2. **Gather** the state relevant to the request (issue/PR metadata,
+   comments, checks) from visible capabilities or `gh`.
+3. **Classify** and handle here, or load the matching specialist and let
+   it own the workflow.
+4. **Report** the state and the next action.
 
-## Routing Rules
+Scoped metadata actions (labels, reactions, issue edits) may be applied
+here only when explicitly requested; everything else routes.
 
-1. **Resolve the operating context first.**
-   - If the user gave a repository, PR number, issue number, or URL, use it.
-   - If the request is about "this branch" / "the current PR", resolve local
-     git context (`git rev-parse --show-toplevel`, `git branch
-     --show-current`) and use `gh pr view --json number,url` only to
-     discover the branch PR.
-   - If the repository is still ambiguous after local inspection, ask for
-     the repo identifier. Do not invent a repo-search flow.
-2. **Classify the request before acting.**
-   - `repo or PR triage` — summarize PRs, issues, patches, comments,
-     labels, reactions, or repository state. Handle here.
-   - `review follow-up` — unresolved review threads, requested changes, or
-     inline review feedback. **Route to `gh-address-comments` immediately.**
-   - `CI debugging` — failing checks, Actions logs, CI root-cause analysis.
-     **Route to `gh-fix-ci` immediately.**
-   - `publish changes` — branch, stage, commit, push, open a PR.
-     **Route to `gh-publish` immediately.**
-3. **Keep the hybrid model consistent after routing.**
-   - Existing DSH GitHub capabilities first for PR/issue data.
-   - Local `git` and `gh` only for the specific gaps they cover best.
+## Boundaries
 
-## General Triage Workflow
-
-1. Resolve repository and item scope (repo / PR / issue / local branch).
-2. Gather structured context through the best visible capability, or `gh`
-   when no suitable tool exists.
-3. Decide whether the task stays in triage or becomes a specialist workflow.
-4. If it becomes review follow-up, CI debugging, or publish, route to the
-   specialist skill and stop duplicating its work here.
-5. End with a clear summary: what was inspected, what is certain, what is
-   still unknown.
-
-## Output Expectations
-
-- For triage requests, return a concise summary of the repository, PR, or
-  issue state and the next likely action.
-- For mixed requests, state which specialist path you are taking and why.
-- For write actions, restate the exact PR, issue, label, or reaction target
-  before applying the change (writes still require explicit user intent or
-  the host approval gate).
-- Never imply that GitHub Actions logs are available through a capability
-  that cannot read them. Log inspection stays a `gh` workflow (see
-  `gh-fix-ci`).
-- Never treat flat comments as complete review-thread state (see
-  `gh-address-comments`).
+- Flat comments are not review-thread state (see `gh-address-comments`).
+- No CI-log claim without actual logs (see `gh-fix-ci`).
+- Remote writes need explicit user intent or the host approval boundary.
 
 ## Examples
 
-- "Use GitHub to summarize the open PRs in this repo and tell me what needs attention."
-- "Help with this PR."
-- "Review the latest comments on PR 482 and tell me what is actionable." → route to `gh-address-comments`
-- "Debug the failing checks on this branch." → route to `gh-fix-ci`
-- "Commit these changes, push them, and open a draft PR." → route to `gh-publish`
+- "Summarize the open PRs in this repo." → stay here
+- "Address the review comments on PR 482." → `gh-address-comments`
+- "Why are the GitHub Actions checks failing on this PR?" → `gh-fix-ci`
+- "Fork awesome-foo, update its README, and open a PR." → `gh-publish`

@@ -41,7 +41,15 @@ for (const name of EXPECTED_SKILLS) {
     assert.equal(parsedName, name, 'frontmatter name must equal the directory name')
     assert.ok(SKILL_NAME.test(parsedName), 'name must be kebab-case')
     assert.ok(description !== undefined && description.length > 10, 'description must be present and meaningful')
-    assert.ok(description.length <= 500, `description must fit the DSH catalog cap (<=500), got ${description.length}`)
+    // The rc.6 model-facing catalog renders name + description (verified
+    // against @deepseek-ai/dsh-tool-skill@0.1.0-rc.6, which emits catalog
+    // entries as `- name: description` with a 500-char truncation cap).
+    // Routing-critical information therefore lives in the description.
+    // 300 chars is this project's own resident-catalog budget, far below
+    // the host cap, so four residents stay cheap to render.
+    assert.ok(description.length <= 300, `description must fit the resident-catalog budget (<=300), got ${description.length}`)
+    // `whenToUse` remains an optional DSH SkillSummary metadata field; its
+    // absence here is a v0.2.0 design choice, not a schema requirement.
     const invocation = parseInvocation(fields)
     assert.equal(invocation.modelInvocable, true, 'skills must be model-invocable')
     assert.equal(invocation.userInvocable, true, 'skills must be user-invocable')
@@ -77,6 +85,32 @@ test('umbrella github skill routes to the three specialist skills', () => {
   assert.ok(!raw.includes('git add -A'), 'umbrella must not carry publish staging rules')
 })
 
+test('gh-publish description carries fork/external and publish/PR semantics', () => {
+  const { raw } = readSkill('gh-publish')
+  const parsed = parseSkillText(raw)
+  const description = scalar(parsed.fields.description).toLowerCase()
+  assert.match(description, /fork|external/, 'gh-publish description must signal fork/external contributions')
+  assert.match(description, /pull request|\bpr\b|publish/, 'gh-publish description must signal publish/PR semantics')
+  assert.match(description, /draft/, 'gh-publish description must signal the draft-PR default')
+})
+
+test('core SKILL.md files do not hardcode known community provider/tool names', () => {
+  // Capability selection is semantics-first: provider names and tool-name
+  // prefixes do not imply capability, so the model-facing skill text must
+  // not name specific community providers/tools.
+  const communityNames = [
+    'PerryLink', 'ZariaEcho', 'kaziii',
+    'ci_diagnose', 'dsh-ci-doctor',
+    'dsh-github-workflow', 'dsh-github-connector', 'dsh-gitflow',
+  ]
+  for (const name of EXPECTED_SKILLS) {
+    const { raw } = readSkill(name)
+    for (const provider of communityNames) {
+      assert.ok(!raw.includes(provider), `${name} SKILL.md must not hardcode community provider/tool name ${provider}`)
+    }
+  }
+})
+
 test('umbrella routes map to real skill directories (no broken routing targets)', () => {
   for (const specialist of ['gh-address-comments', 'gh-fix-ci', 'gh-publish']) {
     assert.ok(statSync(join(SKILLS_DIR, specialist, 'SKILL.md')).isFile(), `routed target ${specialist} exists`)
@@ -106,7 +140,10 @@ test('safety invariants are present in the SKILL.md text', () => {
   assert.ok(fixCi.includes('root cause'), 'gh-fix-ci must demand an evidence-backed root cause')
 
   const publish = readSkill('gh-publish').raw
-  assert.ok(publish.includes('git add -A') && publish.includes('never default'), 'gh-publish must forbid default git add -A')
+  // Scope safety is asserted at the concept level (task-owned changes,
+  // ambiguity stops the flow), not by pinning exact staging phrases.
+  assert.ok(/task-owned|intended changes/.test(publish), 'gh-publish must stage only task-owned changes')
+  assert.ok(/cannot be separated|stop before publishing|stop and report/.test(publish), 'gh-publish must stop on scope ambiguity')
   assert.ok(publish.includes('draft'), 'gh-publish must default to a draft PR')
 })
 

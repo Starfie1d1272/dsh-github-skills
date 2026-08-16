@@ -160,22 +160,26 @@ test('mixed worktree detection: preflight flags it and no helper runs git add -A
   }
 })
 
-test('gh-publish SKILL covers the conformance edge rules', () => {
+test('gh-publish SKILL covers the publish safety invariants (concept level)', () => {
   const publish = readFileSync(join(ROOT, 'skills/gh-publish/SKILL.md'), 'utf8')
-  // Partially staged files must not be blindly re-added (GAP #2).
-  assert.ok(/partially staged/i.test(publish), 'must document partially staged files')
-  assert.ok(/MM/.test(publish), 'must reference the MM porcelain state')
-  assert.ok(/git add -p|specific hunks/.test(publish), 'must offer hunk-level staging for MM files')
-  assert.ok(/scope ambiguity/.test(publish), 'must fail closed on unstaged-hunk ambiguity')
-  // Existing PR on the branch must not be duplicated (GAP #3).
+  // Scope: task-owned only; mixed hunks staged selectively; ambiguity stops.
+  assert.ok(/task-owned/.test(publish), 'must stage only task-owned changes')
+  assert.ok(/selective/.test(publish), 'must stage mixed task/unrelated hunks selectively')
+  assert.ok(/ambiguous|unrelated|separated reliably/.test(publish), 'must fail closed on scope ambiguity')
+  // Existing PR on the branch must not be duplicated.
   assert.ok(/existing PR|already has a PR/i.test(publish), 'must check for an existing PR before creating')
-  assert.ok(/do \*\*not\*\* create a second one/i.test(publish), 'must forbid duplicate PR creation')
-  // Push must not hard-code origin (GAP #4).
-  assert.ok(/tracked remote|upstream/.test(publish), 'must prefer the branch tracked remote')
-  assert.ok(/never assume\s+the remote/i.test(publish), 'must not hard-code origin')
-  // Fork publish must push to the fork remote and fail closed (GAP #5).
-  assert.ok(/fork-remote|fork remote/.test(publish), 'must push to the fork remote for fork PRs')
-  assert.ok(/fail closed/.test(publish), 'must fail closed when fork semantics are unclear')
+  // Push must prefer the tracked/fork remote and never hard-code origin.
+  assert.ok(/tracked or fork remote|tracked|fork remote/i.test(publish), 'must use tracked/fork remote semantics')
+  assert.ok(/never assume/.test(publish), 'must not hard-code origin')
+  // Force push only on explicit request.
+  assert.ok(/no force|force push unless|explicitly requested/.test(publish), 'must gate force push on explicit request')
+  // Draft PR default.
+  assert.ok(/draft/.test(publish), 'must default to a draft PR')
+  // Fork/external contribution must resolve to a target-lineage checkout.
+  assert.ok(/fork|external/.test(publish), 'must cover fork-based external contributions')
+  assert.ok(/target repository\s+lineage/.test(publish), 'must require a checkout of the target repository lineage')
+  // Merge/delete stay outside the publish flow.
+  assert.ok(/merge|deletion/.test(publish), 'must keep merge/delete outside the publish flow')
 })
 
 test('helper argv is passed as separate arguments, never a shell string', () => {

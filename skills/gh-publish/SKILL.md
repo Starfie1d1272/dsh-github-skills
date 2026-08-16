@@ -1,121 +1,55 @@
 ---
 name: gh-publish
-description: Publish local changes to GitHub as a pull request. Confirm scope, branch, stage only the intended files, commit, verify, push, and open a draft PR using existing DSH capabilities with gh/git fallbacks.
-whenToUse: User explicitly asks to commit, push, open a PR, publish changes, "send these changes as a PR", or complete the local-to-GitHub publish flow.
+description: Publish task-scoped changes to GitHub through a branch/commit/push/PR flow, including fork-based external contributions. Use when the user wants changes pushed or a PR opened; draft PR is the default.
 ---
 
-# GitHub Publish Changes
+# GitHub Publish
 
-Use this skill **only** when the user explicitly wants the full publish flow
-from the local checkout: scope confirmation, branch setup if needed,
-staging, commit, verification, push, and opening a pull request. This is the
-only flow in the pack that performs remote writes by design — the publish
-request itself is the explicit intent.
+Remote publication is this skill's primary purpose, so the user's
+requested publish scope defines which remote steps are authorized: push
+task-scoped changes and, when requested, open a pull request. Pushing
+does not imply opening a PR. Fork-based external contributions follow the
+same flow from a checkout of the target repository lineage.
 
-## Prerequisites
+Branching and committing are internal steps here, not entry points: use
+this skill when the user wants changes pushed or a PR opened.
 
-- `gh` installed and authenticated (`gh auth status`); ask the user to run
-  `gh auth login` otherwise.
-- A local git repository with a clear understanding of which changes belong
-  in the PR.
+## Workflow
 
-## Strict order
+1. **Resolve target checkout.** Same repository → the relevant existing
+   checkout. External contribution → create or reuse the user's fork, and
+   work from a checkout/worktree that belongs to the target repository
+   lineage — never continue from an unrelated checkout. Ambiguous target,
+   fork, or base → stop and report.
+2. **Confirm scope.** Inspect the actual status and diff; use
+   `scripts/publish-preflight.mjs` when useful. Stage only task-owned
+   changes. Mixed task/unrelated hunks → stage selectively. If scope
+   cannot be separated reliably, stop before publishing.
+3. **Branch.** Keep a suitable existing feature branch, or create a task
+   branch from the intended base following the repository's convention.
+4. **Commit.** Confirmed scope only; concise message derived from the
+   actual diff and task intent. Do not bypass hooks.
+5. **Verify.** Run only the relevant existing checks for the touched
+   area.
+6. **Push.** Push to the appropriate tracked or fork remote; never assume
+   `origin`. No force push unless explicitly requested, with the risk
+   stated. If the user's requested publish scope ends at push, verify the
+   pushed branch, report the result, and stop — do not open a PR.
+7. **Open PR, when requested.** Check for an existing PR first. Use
+   correct target/base/head and fork semantics. Draft is the default
+   unless the user explicitly wants ready-for-review. Prefer a suitable
+   visible PR-create capability; `gh` fallback. Body from the actual
+   diff, template, and validation.
+8. **Verify published result.** Verify the remote branch after push.
+   When a PR was opened or updated, also re-read it and verify
+   target/base/head, changed-file scope, and available checks. If the
+   published state differs from the intended scope, report it — do not
+   declare success.
+9. **Report.** Branch, commit, PR (when applicable), validation/check
+   state, and any uncertainty.
 
-1. **Resolve the git root.** `git rev-parse --show-toplevel`.
-2. **Inspect the working tree.**
-   - Run `git status --porcelain` and inspect the actual diff before
-     staging anything.
-   - Prefer the bundled read-only `scripts/publish-preflight.mjs` for
-     deterministic scope evidence: git root, branch, detached state,
-     default branch, origin/upstream, staged/unstaged/untracked files,
-     `partiallyStagedFiles`, diff stat, ahead/behind, and the objective
-     change-class signals (`hasStaged`/`hasUnstaged`/`hasUntracked`,
-     `multipleChangeClasses`, `scopeNeedsInspection`, `mixedWorktree`).
-     These signals flag *that* the tree mixes change classes; they never
-     decide scope — judge scope from the actual diff and task intent.
-3. **Identify the intended scope.**
-   - Which files belong to this task? If the tree is mixed, separate
-     task-owned paths from unrelated user changes.
-   - **Partially staged files** (same path staged AND unstaged, porcelain
-     `MM`): the already-staged content is a scope candidate, but re-running
-     `git add <file>` would sweep the user's unstaged hunks in too. Never
-     blindly re-add such a file. Stage only what you can attribute to the
-     task (e.g. `git add -p` for specific hunks); if the hunks cannot be
-     reliably separated, stop before any remote publish and report the
-     scope ambiguity.
-   - **Untracked files** are not automatically irrelevant and not
-     automatically in scope: include them only when they clearly belong to
-     the task, and say so.
-4. **Branch strategy.**
-   - If already on a suitable feature branch, stay on it.
-   - If on a default branch (main/master/...), create a new branch. Suggest
-     `dsh/<short-description>` by default, but follow the repository's own
-     branch conventions when it documents one. Do not force a fixed prefix.
-5. **Stage only the intended changes.**
-   - **Hard rule:** never default to `git add -A` on a mixed worktree.
-   - Stage explicit paths that clearly belong to the task. If scope cannot
-     be separated reliably, stop before any remote publish and report the
-     scope ambiguity.
-   - `git add -A` only when the whole worktree is confirmed in scope.
-6. **Commit.**
-   - Terse commit message derived from the actual diff and task intent.
-   - Follow the target repository's conventions; do not force a language or
-     a `[dsh]`/branded prefix.
-   - Never bypass git hooks (`--no-verify` is off-limits).
-7. **Verify.**
-   - Run only the most relevant checks (test/typecheck/lint/build for the
-     touched area). Do not globally install large toolchains just because a
-     tool is missing; use the project's existing package workflow when one
-     exists.
-8. **Push.**
-   - Push to the branch's **tracked remote** when one exists (preflight
-     `upstream`, e.g. `origin/feature`), otherwise to `origin`. Never assume
-     the remote is named `origin`; if no push remote can be resolved, stop
-     and report the blocker.
-   - `git push -u <remote> <current-branch>` — only after the user asked for
-     the publish flow.
-   - No `--force` unless the user explicitly requests it and you state the
-     risk.
-9. **Open a draft PR.**
-   - **Check for an existing PR first:** `gh pr view --json number,url`.
-     If the current branch already has a PR, do **not** create a second one
-     — report it and continue on that PR (or ask the user whether to update
-     it). Creating a duplicate PR is a remote write the user did not ask
-     for.
-   - Default to **draft** unless the user asked for a ready-for-review PR.
-   - Prefer an existing DSH GitHub PR-create capability if visible
-     (`gh_create_draft_pr`, `github_pr_create`, `pr_create`, ...).
-   - Otherwise `gh pr create --draft --fill --head <current-branch>`.
-   - Derive `head` from `git branch --show-current`; derive `base` from the
-     user request or the remote default branch
-     (`gh repo view --json defaultBranchRef`).
-   - PR title/body: synthesize from user intent + actual diff + commit +
-     repo PR template + linked issue. Real Markdown prose: what changed, why
-     it changed, user/developer impact, root cause when it is a fix, and the
-     checks used to validate it. Follow the target repo's conventions; no
-     forced language or prefix. When using the `gh` CLI fallback, write the
-     body to a temp file so real newlines survive the command line.
-10. **Fork / cross-repo.**
-    - Detect fork semantics early (preflight `origin` URL vs the target
-      repo; `gh pr view --json isCrossRepository`). If the head repo differs
-      from the target repo, do not assume a same-repo PR.
-    - Push the branch to the fork remote (`git push -u <fork-remote>
-      <branch>`), then create the PR against the target repo with
-      `gh pr create --draft --head <fork-owner>:<branch> --repo
-      <target-owner>/<target-repo>` (or a connector flow that supports
-      cross-repo heads).
-    - If fork semantics cannot be resolved reliably, **fail closed**: report
-      the limitation instead of assuming same-repo.
-11. **Summarize.**
-    - Branch, commit SHA, PR target, validation run, and anything the user
-      still needs to confirm.
+## Safety
 
-## Write safety
-
-- Never stage unrelated user changes silently.
-- Never push without confirming scope when the worktree is mixed.
-- Default to a draft PR.
-- If the repository does not appear connected to an accessible GitHub
-  remote, stop and explain the blocker.
-- Merging and branch deletion are never part of this flow; they remain
-  explicit user actions.
+- Never publish unrelated or ambiguous changes.
+- Opening a PR requires its own intent; pushing alone never creates one.
+- Merging and branch deletion require separate explicit intent.

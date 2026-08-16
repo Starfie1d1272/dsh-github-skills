@@ -5,6 +5,126 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.2.0] - 2026-08-16
+
+### Changed
+
+- **Routing and responsibility boundaries rewritten.** All four SKILL.md
+  files replaced with compressed, high-signal prompts focused on the routing
+  contract and safety invariants rather than edge-case coverage. Total body
+  text reduced from 383 (v0.1.2) to **198 lines (−48%)**; the GLM design
+  draft landed at 238, and the final pass kept the compression while fixing
+  routing semantics.
+- **Resident descriptions re-compressed.** The rc.6 model-facing skill
+  catalog renders `name` + `description` for skill selection
+  (`@deepseek-ai/dsh-tool-skill@0.1.0-rc.6` emits `- name: description`
+  entries under a 500-char host cap), so the description is the primary
+  router. The final pass re-compressed the descriptions from the GLM draft
+  (total 1467 chars; `github` alone was 458) to a resident budget of
+  ≤300 chars each (total **799** — below v0.1.2's 851). The `github`
+  description no longer restates the specialists' full routing table; all
+  four descriptions appear together in the catalog.
+- **Mixed specialist composition.** Removed the "mixed requests follow
+  their widest specialist path" rule. A mixed request may require multiple
+  specialists: complete review or CI domain work before publishing, and
+  `gh-publish` does not replace `gh-address-comments` / `gh-fix-ci`.
+  Documented in the umbrella, `references/routing-fixture.md`, and the
+  README quick start.
+- **External-contribution routing corrected (target-checkout semantics).**
+  `gh-publish` step 1 now requires that the local checkout belong to the
+  target repository lineage: same repo → the relevant existing checkout;
+  external contribution → create/reuse the user's fork and work from a
+  checkout/worktree of the target repository lineage — never continue from
+  an unrelated checkout. The GLM draft described "adding a fork remote to
+  the current checkout", which produces an incorrect Git topology when the
+  current checkout is unrelated to the target repository.
+- **Capability abstraction hardened.** Core SKILL.md files no longer name
+  specific community providers/tools (`ci_diagnose`, `dsh-ci-doctor`, ...):
+  use the most specific visible capability whose documented semantics cover
+  the need; provider names and tool-name prefixes do not imply capability.
+  A structure test enforces this.
+- **Post-publish verification restored as a completion invariant.**
+  `gh-publish` step 8 re-reads the created/updated PR and verifies
+  target/base/head, changed-file scope, and available checks; a mismatch is
+  reported instead of declaring success.
+- **Low-level prompt plumbing removed from `gh-publish`.** Dropped the
+  preflight output-field list, the porcelain `MM` tutorial, the `git add -A`
+  accident wording, and the fork-remote / `gh` command tutorials; the
+  numbered 9-step workflow is retained (scope → branch → commit → verify →
+  push → PR → verify published result) with the semantics kept: scope from
+  actual diff + task intent, task-owned staging, selective staging of mixed
+  hunks, stop on ambiguity, tracked/fork remote, no force by default,
+  existing-PR check, draft default, cross-repo semantics, no merge/delete
+  by implication.
+- **Review fixes (trigger/authorization alignment).** The GitHub MCP
+  Docker example now forwards the PAT into the container
+  (`-e GITHUB_PERSONAL_ACCESS_TOKEN`; the mcp-client `env` block feeds the
+  docker CLI process, not the container). The `gh-publish` catalog trigger
+  is tightened to push/open-PR intent — branch/commit are internal steps of
+  the publish flow, not entry points (description and umbrella routing
+  updated). `references/safety-model.md` now states the authorization model
+  precisely (remote writes need prior explicit user intent or an
+  affirmative host approval for that exact mutation; an existing approval
+  gate is not itself authorization) and its per-skill table matches the
+  skills (umbrella: scoped issue/PR metadata writes only). `gh-fix-ci`
+  clarifies that "current branch" resolves to its associated PR; branch-only
+  Actions runs without a PR are outside the workflow (README examples
+  updated to match).
+- **Push-only publish scope (final consistency fix).** `gh-publish` is a
+  remote-publication flow whose authorized steps come from the user's
+  requested publish scope: if the scope ends at push, step 6 verifies the
+  pushed branch, reports, and stops — it never opens a PR. Step 7 became
+  "Open PR, when requested", and step 8 verifies the remote branch and,
+  when a PR was opened or updated, re-reads it (target/base/head,
+  changed-file scope, available checks). The stale "only flow in the pack
+  that performs remote writes" claim was removed (other skills also perform
+  authorized remote writes). `references/routing-fixture.md` gained a
+  push-only case ("push this branch, don't open a PR" → `gh-publish`, push
+  then stop).
+- **`whenToUse` omitted from all four skills (optional field).** The rc.6
+  model-facing catalog renders `name` + `description` only; routing-critical
+  information therefore lives in `description`. DSH SkillSummary still
+  supports optional `whenToUse` metadata, so its absence here is a design
+  choice, not a permanent schema requirement — and the structure test no
+  longer asserts that it must be absent.
+- **Optional GitHub MCP reference added.** `references/github-mcp.md`
+  documents wiring GitHub's official MCP server into DSH
+  (`@deepseek-ai/dsh-mcp-client`, stdio / streamable-http), env-only
+  credentials, read-only/limited toolsets, the context cost of
+  over-registered schemas, visibility verification, and semantics-based
+  tool selection. README links to it briefly; no PAT/YAML/setup detail
+  lives in the four SKILL.md files.
+
+### Removed
+
+- Inputs/prerequisites section from `gh-fix-ci` (inlined into the workflow).
+- Remote write boundary table from `gh-address-comments` (replaced by one
+  sentence).
+- Connector-first responsibilities list and output expectations section
+  from the umbrella (absorbed into the routing and triage sections).
+- Provider/tool-name enumeration from all four SKILL.md bodies (capability
+  selection is semantics-first).
+- The `whenToUse`-absence structure assertion (absence is optional, not a
+  schema requirement).
+
+### Tests
+
+- Structure tests now validate stable contracts instead of exact English
+  phrases: descriptions parse and are meaningful; every description fits the
+  project's resident budget (≤300 chars); the umbrella references all three
+  specialists; the `gh-publish` description carries fork/external +
+  publish/PR semantics; no SKILL.md hardcodes known community
+  provider/tool names; helper references resolve; safety concepts remain
+  present (task-owned staging, stop-on-ambiguity, draft default,
+  report-only external CI, evidence-backed root cause, remote-write
+  boundary).
+- Added `references/routing-fixture.md`: six expected-routing examples
+  (including two mixed requests). Static tests do not claim to prove LLM
+  routing; the fixture documents how to run a real model-routing smoke as
+  observational, non-deterministic evidence.
+
 ## [0.1.2] - 2026-08-15
 
 ### Changed
