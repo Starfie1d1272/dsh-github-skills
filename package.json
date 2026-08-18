@@ -1,7 +1,7 @@
 {
   "name": "dsh-github-skills",
-  "version": "0.2.0",
-  "description": "Skill-first GitHub workflows for DeepSeek Harness: PR triage, review feedback, CI diagnosis, and safe publishing.",
+  "version": "0.2.1",
+  "description": "GitHub workflow skills for DeepSeek Harness, adapted from OpenAI Codex GitHub workflow semantics.",
   "type": "module",
   "license": "Apache-2.0",
   "keywords": [
@@ -13,7 +13,10 @@
     "code-review",
     "agent-skills",
     "developer-tools",
-    "git"
+    "git",
+    "codex",
+    "github-workflows",
+    "workflow-orchestration"
   ],
   "engines": {
     "node": "^22.19.0 || >=24.0.0"
@@ -41,6 +44,7 @@
     "references",
     "cordis.patch.yml",
     "README.md",
+    "README.en.md",
     "README.zh-CN.md",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",

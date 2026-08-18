@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { test } from 'node:test'
 
@@ -37,6 +37,7 @@ test('npm pack succeeds and contains every required path', () => {
       'package/lib/redact.mjs',
       'package/cordis.patch.yml',
       'package/README.md',
+      'package/README.en.md',
       'package/README.zh-CN.md',
       'package/LICENSE',
       'package/THIRD_PARTY_NOTICES.md',
@@ -78,6 +79,47 @@ test('packed package.json declares the DSH bundle contract', () => {
     assert.equal(manifest.main, 'lib/index.js')
     assert.match(manifest.engines.node, /22\.19/)
     assert.equal(manifest.license, 'Apache-2.0')
+  } finally {
+    tmp.clean()
+  }
+})
+
+test('packed READMEs only reference local files that ship in the tarball', () => {
+  const { tmp, files } = pack()
+  try {
+    const tarballSet = new Set(files)
+    const readmes = ['README.md', 'README.en.md', 'README.zh-CN.md']
+    const broken = []
+    // Deliberately a light scan, not a Markdown parser: match the link/image
+    // forms this project actually uses and only resolve relative file paths.
+    const linkRe = /!?\[[^\]]*\]\(([^)\s]+)\)|<img[^>]*\bsrc="([^"]+)"/g
+    for (const rel of readmes) {
+      const readmeDir = dirname(join(ROOT, rel))
+      const text = readFileSync(join(ROOT, rel), 'utf8')
+      const targets = new Set()
+      let m
+      while ((m = linkRe.exec(text)) !== null) {
+        const target = (m[1] ?? m[2] ?? '').trim()
+        if (target) targets.add(target)
+      }
+      for (const target of targets) {
+        // External / in-document references are out of scope.
+        if (/^(https?:|mailto:|#|\/\/)/.test(target)) continue
+        const clean = target.split(/[?#]/)[0]
+        if (!clean) continue
+        const resolved = resolve(readmeDir, clean)
+        const relToRoot = relative(ROOT, resolved)
+        if (isAbsolute(relToRoot) || relToRoot.startsWith('..')) {
+          broken.push(`${rel} -> ${target} (resolves outside the repo)`)
+          continue
+        }
+        const tarballPath = `package/${relToRoot.split(sep).join('/')}`
+        if (!tarballSet.has(tarballPath)) {
+          broken.push(`${rel} -> ${target} (tarball missing ${tarballPath})`)
+        }
+      }
+    }
+    assert.deepEqual(broken, [], 'READMEs must not reference local files absent from the npm tarball')
   } finally {
     tmp.clean()
   }
