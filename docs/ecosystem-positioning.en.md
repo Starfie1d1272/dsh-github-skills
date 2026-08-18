@@ -51,8 +51,7 @@ The policy is therefore:
 
 ## 4. Where it sits in the ecosystem
 
-<!-- Architecture artwork placeholder. After generating the artwork, save it as docs/assets/dsh-github-skills-architecture.png and uncomment the next line. -->
-<!-- ![dsh-github-skills architecture and ecosystem position](assets/dsh-github-skills-architecture.png) -->
+![dsh-github-skills architecture and ecosystem position](assets/dsh-github-skills-architecture.png)
 
 ```text
 GitHub / GitHub Actions / local Git

@@ -103,8 +103,7 @@ Codex 官方 GitHub plugin 面向相对确定的 GitHub connector / MCP 环境�
 
 ## 4. 在 DSH GitHub 生态中的位置
 
-<!-- 架构宣传图预留位置。生成后放到 docs/assets/dsh-github-skills-architecture.png，并取消下一行注释。 -->
-<!-- ![dsh-github-skills 架构与生态定位](assets/dsh-github-skills-architecture.png) -->
+![dsh-github-skills 架构与生态定位](assets/dsh-github-skills-architecture.png)
 
 ```text
 GitHub / GitHub Actions / 本地 Git

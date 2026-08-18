@@ -14,8 +14,9 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/Starfie1d1272/dsh-github-skills/ci.yml?branch=main)](https://github.com/Starfie1d1272/dsh-github-skills/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/github/license/Starfie1d1272/dsh-github-skills)](LICENSE)
 
-<!-- 架构宣传图预留位置。生成后放到 docs/assets/dsh-github-skills-architecture.png，并取消下一行注释。 -->
-<!-- ![dsh-github-skills：Codex 工作流语义到 DSH 多 provider 生态](docs/assets/dsh-github-skills-architecture.png) -->
+<p align="center">
+  <img src="docs/assets/dsh-github-skills-architecture.png" alt="dsh-github-skills 架构概览：从 Codex 工作流语义基线到 DSH 多 provider 生态" width="100%">
+</p>
 
 ## 为什么做这个
 

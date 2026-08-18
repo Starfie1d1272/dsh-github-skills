@@ -14,8 +14,9 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/Starfie1d1272/dsh-github-skills/ci.yml?branch=main)](https://github.com/Starfie1d1272/dsh-github-skills/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/github/license/Starfie1d1272/dsh-github-skills)](LICENSE)
 
-<!-- Architecture artwork placeholder. Save the final image as docs/assets/dsh-github-skills-architecture.png and uncomment the next line. -->
-<!-- ![dsh-github-skills: Codex workflow semantics adapted to the DSH provider ecosystem](docs/assets/dsh-github-skills-architecture.png) -->
+<p align="center">
+  <img src="docs/assets/dsh-github-skills-architecture.png" alt="dsh-github-skills architecture overview: from the Codex workflow-semantic baseline to the DSH provider ecosystem" width="100%">
+</p>
 
 ## Why this project exists
 
