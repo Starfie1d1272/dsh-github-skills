@@ -1,6 +1,6 @@
 # dsh-github-skills
 
-[简体中文](README.md) | **English**
+[简体中文](https://github.com/Starfie1d1272/dsh-github-skills/blob/main/README.md) | **English**
 
 > **Bring the workflow semantics of OpenAI's official Codex GitHub plugin to DeepSeek Harness.**
 >
@@ -15,7 +15,7 @@
 [![License: Apache-2.0](https://img.shields.io/github/license/Starfie1d1272/dsh-github-skills)](LICENSE)
 
 <p align="center">
-  <img src="docs/assets/dsh-github-skills-architecture.png" alt="dsh-github-skills architecture overview: from the Codex workflow-semantic baseline to the DSH provider ecosystem" width="100%">
+  <img src="https://raw.githubusercontent.com/Starfie1d1272/dsh-github-skills/main/docs/assets/dsh-github-skills-architecture.png" alt="dsh-github-skills architecture overview: from the Codex workflow-semantic baseline to the DSH provider ecosystem" width="100%">
 </p>
 
 ## Why this project exists
@@ -32,7 +32,7 @@ Those projects mainly answer:
 
 It deliberately does not reimplement GitHub APIs. Its role is **workflow semantics, routing, evidence requirements, safe composition, and fallbacks**.
 
-For the full design rationale, see **[Positioning dsh-github-skills: from Codex GitHub Skills to the DSH workflow layer](docs/ecosystem-positioning.en.md)**.
+For the full design rationale, see **[Positioning dsh-github-skills: from Codex GitHub Skills to the DSH workflow layer](https://github.com/Starfie1d1272/dsh-github-skills/blob/main/docs/ecosystem-positioning.en.md)**.
 
 ## From Codex to DSH
 
@@ -211,11 +211,11 @@ The package does not register its own GitHub API tools and does not manage OAuth
 
 ## Documentation
 
-- [Ecosystem positioning](docs/ecosystem-positioning.en.md)
+- [Ecosystem positioning](https://github.com/Starfie1d1272/dsh-github-skills/blob/main/docs/ecosystem-positioning.en.md)
 - [Codex upstream conformance](references/codex-conformance.md)
 - [Capability resolution matrix](references/capability-matrix.md)
 - [Safety model](references/safety-model.md)
-- [DSH GitHub ecosystem analysis](references/ecosystem-analysis.md)
+- [DSH GitHub ecosystem analysis (2026-08-14 historical snapshot)](references/ecosystem-analysis.md)
 - [Upstream notes](references/upstream-notes.md)
 - [GitHub MCP reference](references/github-mcp.md)
 - [Routing behavioral specification](references/routing-fixture.md)

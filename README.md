@@ -1,6 +1,6 @@
 # dsh-github-skills
 
-**简体中文** | [English](README.en.md)
+**简体中文** | [English](https://github.com/Starfie1d1272/dsh-github-skills/blob/main/README.en.md)
 
 > **把 OpenAI Codex 官方 GitHub 工作流带到 DeepSeek Harness。**
 >
@@ -15,7 +15,7 @@
 [![License: Apache-2.0](https://img.shields.io/github/license/Starfie1d1272/dsh-github-skills)](LICENSE)
 
 <p align="center">
-  <img src="docs/assets/dsh-github-skills-architecture.png" alt="dsh-github-skills 架构概览：从 Codex 工作流语义基线到 DSH 多 provider 生态" width="100%">
+  <img src="https://raw.githubusercontent.com/Starfie1d1272/dsh-github-skills/main/docs/assets/dsh-github-skills-architecture.png" alt="dsh-github-skills 架构概览：从 Codex 工作流语义基线到 DSH 多 provider 生态" width="100%">
 </p>
 
 ## 为什么做这个
@@ -32,7 +32,7 @@ DSH 已经出现了不少 GitHub / Git 能力插件：有人负责认证，有�
 
 因此，本项目刻意不重新实现 GitHub API，而是作为 DSH GitHub 生态之上的**工作流语义 / 路由 / 证据要求 / 安全组合层**。
 
-完整设计与生态定位见：**[《dsh-github-skills 的定位：从 Codex GitHub Skill 到 DSH 工作流层》](docs/ecosystem-positioning.md)**。
+完整设计与生态定位见：**[《dsh-github-skills 的定位：从 Codex GitHub Skill 到 DSH 工作流层》](https://github.com/Starfie1d1272/dsh-github-skills/blob/main/docs/ecosystem-positioning.md)**。
 
 ## 从 Codex 到 DSH
 
@@ -227,11 +227,11 @@ docs/                   面向用户和维护者的定位与说明文档
 
 ## 文档
 
-- [生态定位：从 Codex GitHub Skill 到 DSH 工作流层](docs/ecosystem-positioning.md)
+- [生态定位：从 Codex GitHub Skill 到 DSH 工作流层](https://github.com/Starfie1d1272/dsh-github-skills/blob/main/docs/ecosystem-positioning.md)
 - [Codex 上游一致性记录](references/codex-conformance.md)
 - [能力选择与回退矩阵](references/capability-matrix.md)
 - [安全模型](references/safety-model.md)
-- [DSH GitHub 生态调研](references/ecosystem-analysis.md)
+- [DSH GitHub 生态调研（2026-08-14 历史快照）](references/ecosystem-analysis.md)
 - [上游来源与适配说明](references/upstream-notes.md)
 - [GitHub MCP 参考](references/github-mcp.md)
 - [路由行为规格](references/routing-fixture.md)
