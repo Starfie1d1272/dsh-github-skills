@@ -1,7 +1,10 @@
-> Design-time research artifact (2026-08): the ecosystem-boundary analysis that
-> motivated this pack's differentiation. It studies the seven DSH GitHub/Git/CI
-> projects as of the date above; per-repo raw dumps are not part of this repo.
-> The conclusions feed the "Relations to existing projects" section of the README.
+> **Historical snapshot: 2026-08-14.**
+> This document records the ecosystem state used during the original design audit
+> (a design-time research artifact). It studies the seven DSH GitHub/Git/CI
+> projects as of that date; per-repo raw dumps are not part of this repo.
+> The current README and positioning documents may reflect capabilities added
+> after this snapshot, so this record should be read as historical design
+> evidence rather than a live picture of the ecosystem.
 
 # dsh-github-skills 生态边界分析报告
 
