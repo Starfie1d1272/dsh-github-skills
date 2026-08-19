@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-18
+
+### Changed
+
+- Made the Chinese README the primary project page and added a complete English secondary README.
+- Repositioned the project around OpenAI Codex GitHub workflow semantics adapted for the DSH multi-provider environment.
+- Added ecosystem-positioning documentation and the architecture overview.
+- Added `README.en.md` to the npm package and aligned repository-only README resources with GitHub URLs.
+- Marked `references/ecosystem-analysis.md` explicitly as a 2026-08-14 historical snapshot.
+- Updated package metadata for the clarified workflow-layer positioning.
+
+### Tests
+
+- Added npm packed-document integrity coverage so local README links must resolve to files that actually ship in the tarball.
+
+No Skill or runtime behavior changes.
+
 ## [0.2.0] - 2026-08-16
 
 ### Changed
